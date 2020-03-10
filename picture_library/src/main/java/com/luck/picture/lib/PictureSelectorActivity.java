@@ -189,10 +189,12 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
     @Override
     public void onEnterAnimationComplete() {
         super.onEnterAnimationComplete();
-        if (!config.isFallbackVersion2 || Build.VERSION.SDK_INT > Build.VERSION_CODES.KITKAT) {
-            if (!isFirstEnterActivity) {
-                loadAllMediaData();
-                isFirstEnterActivity = true;
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.KITKAT) {
+            if (!config.isFallbackVersion2) {
+                if (!isFirstEnterActivity) {
+                    loadAllMediaData();
+                    isFirstEnterActivity = true;
+                }
             }
         }
     }
@@ -1491,6 +1493,8 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
                 media.setSize(new File(cutPath).length());
                 media.setChooseModel(config.chooseMode);
                 media.setCut(true);
+                media.setSize(new File(TextUtils.isEmpty(cutPath)
+                        ? media.getPath() : cutPath).length());
                 if (SdkVersionUtils.checkedAndroid_Q()) {
                     media.setAndroidQToPath(cutPath);
                 }
@@ -1503,6 +1507,8 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
                 media.setCutPath(cutPath);
                 media.setSize(new File(cutPath).length());
                 media.setChooseModel(config.chooseMode);
+                media.setSize(new File(TextUtils.isEmpty(cutPath)
+                        ? media.getPath() : cutPath).length());
                 media.setCut(true);
                 if (SdkVersionUtils.checkedAndroid_Q()) {
                     media.setAndroidQToPath(cutPath);
@@ -1539,15 +1545,15 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
             for (int i = 0; i < size; i++) {
                 CutInfo c = mCuts.get(i);
                 LocalMedia media = result.get(i);
-                media.setCut(TextUtils.isEmpty(c.getCutPath()) ? false : true);
+                media.setCut(!TextUtils.isEmpty(c.getCutPath()));
                 media.setPath(c.getPath());
                 media.setMimeType(c.getMimeType());
                 media.setCutPath(c.getCutPath());
                 media.setWidth(c.getImageWidth());
                 media.setHeight(c.getImageHeight());
-                media.setSize(new File(TextUtils.isEmpty(c.getCutPath())
-                        ? c.getPath() : c.getCutPath()).length());
                 media.setAndroidQToPath(isAndroidQ ? c.getCutPath() : media.getAndroidQToPath());
+                media.setSize(new File(TextUtils.isEmpty(c.getCutPath())
+                        ? isAndroidQ ? media.getAndroidQToPath() : c.getPath() : c.getCutPath()).length());
             }
             handlerResult(result);
         } else {
@@ -1557,17 +1563,17 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
                 CutInfo c = mCuts.get(i);
                 LocalMedia media = new LocalMedia();
                 media.setId(c.getId());
-                media.setCut(TextUtils.isEmpty(c.getCutPath()) ? false : true);
+                media.setCut(!TextUtils.isEmpty(c.getCutPath()));
                 media.setPath(c.getPath());
                 media.setCutPath(c.getCutPath());
                 media.setMimeType(c.getMimeType());
                 media.setWidth(c.getImageWidth());
                 media.setHeight(c.getImageHeight());
                 media.setDuration(c.getDuration());
-                media.setSize(new File(TextUtils.isEmpty(c.getCutPath())
-                        ? c.getPath() : c.getCutPath()).length());
                 media.setChooseModel(config.chooseMode);
                 media.setAndroidQToPath(isAndroidQ ? c.getCutPath() : null);
+                media.setSize(new File(TextUtils.isEmpty(c.getCutPath())
+                        ? isAndroidQ ? media.getAndroidQToPath() : c.getPath() : c.getCutPath()).length());
                 result.add(media);
             }
             handlerResult(result);
