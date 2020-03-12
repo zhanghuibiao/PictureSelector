@@ -659,7 +659,7 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
         if (config.enableCrop) {
             if (config.selectionMode == PictureConfig.SINGLE && eqImg) {
                 config.originalPath = image.getPath();
-                startCrop(config.originalPath);
+                startCrop(config.originalPath, image.getMimeType());
             } else {
                 // 是图片和选择压缩并且是多张，调用批量压缩
                 ArrayList<CutInfo> cuts = new ArrayList<>();
@@ -727,7 +727,7 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
         if (config.enableCrop && eqImg) {
             if (config.selectionMode == PictureConfig.SINGLE) {
                 config.originalPath = image.getPath();
-                startCrop(config.originalPath);
+                startCrop(config.originalPath, image.getMimeType());
             } else {
                 // 是图片和选择压缩并且是多张，调用批量压缩
                 ArrayList<CutInfo> cuts = new ArrayList<>();
@@ -990,7 +990,7 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
             list.add(media);
             if (config.enableCrop && PictureMimeType.eqImage(media.getMimeType()) && !config.isCheckOriginalImage) {
                 mAdapter.bindSelectImages(list);
-                startCrop(media.getPath());
+                startCrop(media.getPath(), media.getMimeType());
             } else {
                 handlerResult(list);
             }
@@ -1241,7 +1241,7 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
         if (config.enableCrop && eqImg) {
             // 去裁剪
             config.originalPath = config.cameraPath;
-            startCrop(config.cameraPath);
+            startCrop(config.cameraPath, mimeType);
         } else if (config.isCompress && eqImg) {
             // 去压缩
             List<LocalMedia> selectedImages = mAdapter.getSelectedImages();
@@ -1490,13 +1490,20 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
             if (media != null) {
                 config.originalPath = media.getPath();
                 media.setCutPath(cutPath);
-                media.setSize(new File(cutPath).length());
                 media.setChooseModel(config.chooseMode);
-                media.setCut(true);
-                media.setSize(new File(TextUtils.isEmpty(cutPath)
-                        ? media.getPath() : cutPath).length());
-                if (SdkVersionUtils.checkedAndroid_Q()) {
+                if (TextUtils.isEmpty(cutPath)) {
+                    if (SdkVersionUtils.checkedAndroid_Q()
+                            && media.getPath().startsWith("content://")) {
+                        String path = PictureFileUtils.getPath(this, Uri.parse(media.getPath()));
+                        media.setSize(new File(path).length());
+                    } else {
+                        media.setSize(new File(media.getPath()).length());
+                    }
+                    media.setCut(false);
+                } else {
+                    media.setSize(new File(cutPath).length());
                     media.setAndroidQToPath(cutPath);
+                    media.setCut(true);
                 }
                 result.add(media);
                 handlerResult(result);
@@ -1505,13 +1512,22 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
                 media = list != null && list.size() > 0 ? list.get(0) : null;
                 config.originalPath = media.getPath();
                 media.setCutPath(cutPath);
-                media.setSize(new File(cutPath).length());
                 media.setChooseModel(config.chooseMode);
                 media.setSize(new File(TextUtils.isEmpty(cutPath)
                         ? media.getPath() : cutPath).length());
-                media.setCut(true);
-                if (SdkVersionUtils.checkedAndroid_Q()) {
+                if (TextUtils.isEmpty(cutPath)) {
+                    if (SdkVersionUtils.checkedAndroid_Q()
+                            && media.getPath().startsWith("content://")) {
+                        String path = PictureFileUtils.getPath(this, Uri.parse(media.getPath()));
+                        media.setSize(new File(path).length());
+                    } else {
+                        media.setSize(new File(media.getPath()).length());
+                    }
+                    media.setCut(false);
+                } else {
+                    media.setSize(new File(cutPath).length());
                     media.setAndroidQToPath(cutPath);
+                    media.setCut(true);
                 }
                 result.add(media);
                 handlerResult(result);
@@ -1552,8 +1568,7 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
                 media.setWidth(c.getImageWidth());
                 media.setHeight(c.getImageHeight());
                 media.setAndroidQToPath(isAndroidQ ? c.getCutPath() : media.getAndroidQToPath());
-                media.setSize(new File(TextUtils.isEmpty(c.getCutPath())
-                        ? isAndroidQ ? media.getAndroidQToPath() : c.getPath() : c.getCutPath()).length());
+                media.setSize(!TextUtils.isEmpty(c.getCutPath()) ? new File(c.getCutPath()).length() : media.getSize());
             }
             handlerResult(result);
         } else {
@@ -1572,8 +1587,16 @@ public class PictureSelectorActivity extends PictureBaseActivity implements View
                 media.setDuration(c.getDuration());
                 media.setChooseModel(config.chooseMode);
                 media.setAndroidQToPath(isAndroidQ ? c.getCutPath() : null);
-                media.setSize(new File(TextUtils.isEmpty(c.getCutPath())
-                        ? isAndroidQ ? media.getAndroidQToPath() : c.getPath() : c.getCutPath()).length());
+                if (!TextUtils.isEmpty(c.getCutPath())) {
+                    media.setSize(new File(c.getCutPath()).length());
+                } else {
+                    if (SdkVersionUtils.checkedAndroid_Q() && c.getPath().startsWith("content://")) {
+                        String path = PictureFileUtils.getPath(this, Uri.parse(c.getPath()));
+                        media.setSize(new File(path).length());
+                    } else {
+                        media.setSize(new File(c.getPath()).length());
+                    }
+                }
                 result.add(media);
             }
             handlerResult(result);
