@@ -84,10 +84,14 @@ public class LocalMedia implements Parcelable {
     private boolean compressed;
     /**
      * image or video width
+     * <p>
+     * # If zero occurs, the developer needs to handle it extra
      */
     private int width;
     /**
      * image or video height
+     * <p>
+     * # If zero occurs, the developer needs to handle it extra
      */
     private int height;
 
@@ -106,6 +110,11 @@ public class LocalMedia implements Parcelable {
      */
     private String fileName;
 
+    /**
+     * Parent  Folder Name
+     */
+    private String parentFolderName;
+
     public LocalMedia() {
 
     }
@@ -117,11 +126,12 @@ public class LocalMedia implements Parcelable {
         this.mimeType = mimeType;
     }
 
-    public LocalMedia(long id, String path, String fileName, long duration, int chooseModel,
+    public LocalMedia(long id, String path, String fileName, String parentFolderName, long duration, int chooseModel,
                       String mimeType, int width, int height, long size) {
         this.id = id;
         this.path = path;
         this.fileName = fileName;
+        this.parentFolderName = parentFolderName;
         this.duration = duration;
         this.chooseModel = chooseModel;
         this.mimeType = mimeType;
@@ -301,6 +311,14 @@ public class LocalMedia implements Parcelable {
         this.id = id;
     }
 
+    public String getParentFolderName() {
+        return parentFolderName;
+    }
+
+    public void setParentFolderName(String parentFolderName) {
+        this.parentFolderName = parentFolderName;
+    }
+
     @Override
     public int describeContents() {
         return 0;
@@ -328,6 +346,7 @@ public class LocalMedia implements Parcelable {
         dest.writeLong(this.size);
         dest.writeByte(this.isOriginal ? (byte) 1 : (byte) 0);
         dest.writeString(this.fileName);
+        dest.writeString(this.parentFolderName);
     }
 
     protected LocalMedia(Parcel in) {
@@ -351,6 +370,7 @@ public class LocalMedia implements Parcelable {
         this.size = in.readLong();
         this.isOriginal = in.readByte() != 0;
         this.fileName = in.readString();
+        this.parentFolderName = in.readString();
     }
 
     public static final Creator<LocalMedia> CREATOR = new Creator<LocalMedia>() {

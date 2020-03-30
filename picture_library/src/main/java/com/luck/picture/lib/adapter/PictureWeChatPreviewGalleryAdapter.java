@@ -9,6 +9,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.luck.picture.lib.R;
+import com.luck.picture.lib.config.PictureMimeType;
 import com.luck.picture.lib.config.PictureSelectionConfig;
 import com.luck.picture.lib.entity.LocalMedia;
 
@@ -50,6 +51,10 @@ public class PictureWeChatPreviewGalleryAdapter
         }
     }
 
+    public boolean isDataEmpty() {
+        return list == null || list.size() == 0;
+    }
+
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -63,10 +68,10 @@ public class PictureWeChatPreviewGalleryAdapter
         LocalMedia item = getItem(position);
         if (item != null) {
             holder.viewBorder.setVisibility(item.isChecked() ? View.VISIBLE : View.GONE);
-            if (config != null && config.imageEngine != null) {
-                config.imageEngine.loadImage(holder.itemView.getContext(), item.getPath(), holder.ivImage);
+            if (config != null && PictureSelectionConfig.imageEngine != null) {
+                PictureSelectionConfig.imageEngine.loadImage(holder.itemView.getContext(), item.getPath(), holder.ivImage);
             }
-
+            holder.ivPlay.setVisibility(PictureMimeType.eqVideo(item.getMimeType()) ? View.VISIBLE : View.GONE);
             holder.itemView.setOnClickListener(v -> {
                 if (listener != null && holder.getAdapterPosition() >= 0) {
                     listener.onItemClick(holder.getAdapterPosition(), getItem(position), v);
@@ -81,11 +86,13 @@ public class PictureWeChatPreviewGalleryAdapter
 
     class ViewHolder extends RecyclerView.ViewHolder {
         ImageView ivImage;
+        ImageView ivPlay;
         View viewBorder;
 
         public ViewHolder(View itemView) {
             super(itemView);
             ivImage = itemView.findViewById(R.id.ivImage);
+            ivPlay = itemView.findViewById(R.id.ivPlay);
             viewBorder = itemView.findViewById(R.id.viewBorder);
         }
     }

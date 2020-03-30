@@ -167,10 +167,10 @@ public class PhotoFragment extends Fragment implements View.OnClickListener,
                 tv_original_tips.setVisibility(isChecked ? View.VISIBLE : View.GONE));
         cb_choose_mode.setOnCheckedChangeListener((buttonView, isChecked) -> {
             cb_single_back.setVisibility(isChecked ? View.GONE : View.VISIBLE);
-            cb_single_back.setChecked(isChecked ? false : cb_single_back.isChecked());
+            cb_single_back.setChecked(!isChecked && cb_single_back.isChecked());
         });
 
-        mAdapter.setOnItemClickListener((position, v) -> {
+        mAdapter.setOnItemClickListener((v, position) -> {
             if (selectList.size() > 0) {
                 LocalMedia media = selectList.get(position);
                 String mimeType = media.getMimeType();
@@ -423,6 +423,7 @@ public class PhotoFragment extends Fragment implements View.OnClickListener,
                         .imageSpanCount(4)// 每行显示个数
                         .isReturnEmpty(false)// 未选择数据时点击按钮是否可以返回
                         //.isAndroidQTransform(false)// 是否需要处理Android Q 拷贝至应用沙盒的操作，只针对compress(false); && enableCrop(false);有效,默认处理
+                        .loadCacheResourcesCallback(GlideCacheEngine.createCacheEngine())// 获取图片资源缓存，主要是解决华为10部分机型在拷贝文件过多时会出现卡的问题，这里可以判断只在会出现一直转圈问题机型上使用
                         .setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)// 设置相册Activity方向，不设置默认使用系统
                         .isOriginalImageControl(cb_original.isChecked())// 是否显示原图控制按钮，如果设置为true则用户可以自由选择是否使用原图，压缩、裁剪功能将会失效
                         //.cameraFileName("test.png")    // 重命名拍照文件名、注意这个只在使用相机时可以使用，如果使用相机又开启了压缩或裁剪 需要配合压缩和裁剪文件名api
@@ -474,7 +475,7 @@ public class PhotoFragment extends Fragment implements View.OnClickListener,
                         //.recordVideoSecond()//录制视频秒数 默认60s
                         //.setOutputCameraPath("/CustomPath")// 自定义拍照保存路径  注：已废弃
                         //.forResult(PictureConfig.CHOOSE_REQUEST);//结果回调onActivityResult code
-                        .forResult(new OnResultCallbackListener() {
+                        .forResult(new OnResultCallbackListener<LocalMedia>() {
                             @Override
                             public void onResult(List<LocalMedia> result) {
                                 // 图片选择结果回调
@@ -518,6 +519,7 @@ public class PhotoFragment extends Fragment implements View.OnClickListener,
                         .maxSelectNum(maxSelectNum)// 最大图片选择数量
                         .minSelectNum(1)// 最小选择数量
                         .isUseCustomCamera(cb_custom_camera.isChecked())// 是否使用自定义相机
+                        .loadCacheResourcesCallback(GlideCacheEngine.createCacheEngine())// 获取图片资源缓存，主要是解决华为10部分机型在拷贝文件过多时会出现卡的问题，这里可以判断只在会出现一直转圈问题机型上使用
                         //.querySpecifiedFormatSuffix(PictureMimeType.ofPNG())// 查询指定后缀格式资源
                         .selectionMode(cb_choose_mode.isChecked() ?
                                 PictureConfig.MULTIPLE : PictureConfig.SINGLE)// 多选 or 单选
@@ -555,7 +557,7 @@ public class PhotoFragment extends Fragment implements View.OnClickListener,
                         //.videoQuality()// 视频录制质量 0 or 1
                         //.videoSecond()////显示多少秒以内的视频or音频也可适用
                         //.forResult(PictureConfig.CHOOSE_REQUEST);//结果回调onActivityResult code
-                        .forResult(new OnResultCallbackListener() {
+                        .forResult(new OnResultCallbackListener<LocalMedia>() {
                             @Override
                             public void onResult(List<LocalMedia> result) {
                                 // 图片选择结果回调

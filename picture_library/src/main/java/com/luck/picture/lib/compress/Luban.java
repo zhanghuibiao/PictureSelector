@@ -13,8 +13,8 @@ import android.util.Log;
 import com.luck.picture.lib.config.PictureMimeType;
 import com.luck.picture.lib.entity.LocalMedia;
 import com.luck.picture.lib.tools.AndroidQTransformUtils;
+import com.luck.picture.lib.tools.DESUtils;
 import com.luck.picture.lib.tools.DateUtils;
-import com.luck.picture.lib.tools.Digest;
 import com.luck.picture.lib.tools.PictureFileUtils;
 import com.luck.picture.lib.tools.SdkVersionUtils;
 import com.luck.picture.lib.tools.StringUtils;
@@ -26,6 +26,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 
 @SuppressWarnings("unused")
 public class Luban implements Handler.Callback {
@@ -79,24 +80,24 @@ public class Luban implements Handler.Callback {
      */
     private File getImageCacheFile(Context context, InputStreamProvider provider, String suffix) {
         if (TextUtils.isEmpty(mTargetDir)) {
-            if (getImageCacheDir(context) != null) {
-                mTargetDir = getImageCacheDir(context).getAbsolutePath();
+            File imageCacheDir = getImageCacheDir(context);
+            if (imageCacheDir != null) {
+                mTargetDir = imageCacheDir.getAbsolutePath();
             }
         }
         String cacheBuilder = "";
         try {
-            String md5Value = Digest.computeToQMD5(provider.open());
+            LocalMedia media = provider.getMedia();
+            String md5Value = DESUtils.encode(DESUtils.DES_KEY_STRING, media.getPath(), media.getWidth(), media.getHeight());
             if (!TextUtils.isEmpty(md5Value)) {
-                cacheBuilder = new StringBuffer()
-                        .append(mTargetDir).append("/")
-                        .append("IMG_")
-                        .append(md5Value.toUpperCase())
-                        .append(TextUtils.isEmpty(suffix) ? ".jpg" : suffix).toString();
+                cacheBuilder = mTargetDir + "/" +
+                        "IMG_" +
+                        md5Value.toUpperCase() +
+                        (TextUtils.isEmpty(suffix) ? ".jpg" : suffix);
             } else {
-                cacheBuilder = new StringBuffer()
-                        .append(mTargetDir).append("/")
-                        .append(DateUtils.getCreateFileName("IMG_"))
-                        .append(TextUtils.isEmpty(suffix) ? ".jpg" : suffix).toString();
+                cacheBuilder = mTargetDir + "/" +
+                        DateUtils.getCreateFileName("IMG_") +
+                        (TextUtils.isEmpty(suffix) ? ".jpg" : suffix);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -262,6 +263,9 @@ public class Luban implements Handler.Callback {
     private File compressRealLocalMedia(Context context, InputStreamProvider path) throws IOException {
         File result;
         LocalMedia media = path.getMedia();
+        if (media == null) {
+            throw new NullPointerException("Luban Compress LocalMedia Can't be empty");
+        }
         String newPath;
         if (isAndroidQ) {
             newPath = !TextUtils.isEmpty(media.getRealPath()) ? media.getRealPath() :
@@ -269,7 +273,7 @@ public class Luban implements Handler.Callback {
         } else {
             newPath = path.getPath();
         }
-        String suffix = Checker.SINGLE.extSuffix(media != null ? path.getMedia().getMimeType() : "");
+        String suffix = Checker.SINGLE.extSuffix(media.getMimeType());
         File outFile = getImageCacheFile(context, path, TextUtils.isEmpty(suffix) ? Checker.SINGLE.extSuffix(path) : suffix);
         String filename = "";
         if (!TextUtils.isEmpty(mNewFileName)) {
@@ -285,8 +289,8 @@ public class Luban implements Handler.Callback {
                 // GIF without compression
                 if (isAndroidQ) {
                     String newFilePath = media.isCut() ? media.getCutPath() :
-                            AndroidQTransformUtils.parseImagePathToAndroidQ
-                                    (context, path.getPath(), filename, media.getMimeType());
+                            AndroidQTransformUtils.copyPathToAndroidQ(context, path.getPath(),
+                                    media.getWidth(), media.getHeight(), media.getMimeType(), filename);
                     result = new File(newFilePath);
                 } else {
                     result = new File(newPath);
@@ -298,8 +302,8 @@ public class Luban implements Handler.Callback {
                 } else {
                     if (isAndroidQ) {
                         String newFilePath = media.isCut() ? media.getCutPath() :
-                                AndroidQTransformUtils.parseImagePathToAndroidQ
-                                        (context, path.getPath(), filename, media.getMimeType());
+                                AndroidQTransformUtils.copyPathToAndroidQ(context, path.getPath(),
+                                        media.getWidth(), media.getHeight(), media.getMimeType(), filename);
                         result = new File(newFilePath);
                     } else {
                         result = new File(newPath);
@@ -311,8 +315,8 @@ public class Luban implements Handler.Callback {
                 // GIF without compression
                 if (isAndroidQ) {
                     String newFilePath = media.isCut() ? media.getCutPath() :
-                            AndroidQTransformUtils.parseImagePathToAndroidQ
-                                    (context, path.getPath(), filename, media.getMimeType());
+                            AndroidQTransformUtils.copyPathToAndroidQ(context,
+                                    path.getPath(), media.getWidth(), media.getHeight(), media.getMimeType(), filename);
                     result = new File(newFilePath);
                 } else {
                     result = new File(newPath);
@@ -321,8 +325,9 @@ public class Luban implements Handler.Callback {
                 boolean isCompress = Checker.SINGLE.needCompressToLocalMedia(mLeastCompressSize, newPath);
                 result = isCompress ? new Engine(path, outFile, focusAlpha, compressQuality).compress() :
                         isAndroidQ ? new File(media.isCut() ? media.getCutPath() :
-                                AndroidQTransformUtils.parseImagePathToAndroidQ
-                                        (context, path.getPath(), filename, media.getMimeType())) : new File(newPath);
+                                Objects.requireNonNull(AndroidQTransformUtils.copyPathToAndroidQ
+                                        (context, path.getPath(),
+                                                media.getWidth(), media.getHeight(), media.getMimeType(), filename))) : new File(newPath);
             }
         }
         return result;
@@ -406,8 +411,10 @@ public class Luban implements Handler.Callback {
             mStreamProviders.add(new InputStreamAdapter() {
                 @Override
                 public InputStream openInternal() throws IOException {
-                    if (isAndroidQ && !media.isCut() && media.getPath().startsWith("content://")) {
-                        // 如果是Android Q并且没有裁剪过走，因为是先裁剪后压缩，如果裁剪过要用裁剪后的地址去压缩
+                    if (PictureMimeType.isContent(media.getPath()) && !media.isCut()) {
+                        if (!TextUtils.isEmpty(media.getAndroidQToPath())) {
+                            return new FileInputStream(media.getAndroidQToPath());
+                        }
                         return context.getContentResolver().openInputStream(Uri.parse(media.getPath()));
                     } else {
                         return new FileInputStream(media.isCut() ? media.getCutPath() : media.getPath());
@@ -416,7 +423,7 @@ public class Luban implements Handler.Callback {
 
                 @Override
                 public String getPath() {
-                    return media.isCut() ? media.getCutPath() : media.getPath();
+                    return media.isCut() ? media.getCutPath() : TextUtils.isEmpty(media.getAndroidQToPath()) ? media.getPath() : media.getAndroidQToPath();
                 }
 
                 @Override

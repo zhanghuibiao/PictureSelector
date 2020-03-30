@@ -28,8 +28,13 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.util.Locale;
+
+import okio.BufferedSink;
+import okio.BufferedSource;
+import okio.Okio;
 
 /**
  * @author：luck
@@ -43,15 +48,17 @@ public class PictureFileUtils {
     public static final String POST_VIDEO = ".mp4";
     public static final String POST_AUDIO = ".mp3";
 
+
     /**
      * @param context
      * @param type
      * @param format
+     * @param outCameraDirectory
      * @return
      */
     @Nullable
-    public static File createCameraFile(Context context, int type, String fileName, String format) {
-        return createMediaFile(context, type, fileName, format);
+    public static File createCameraFile(Context context, int type, String fileName, String format, String outCameraDirectory) {
+        return createMediaFile(context, type, fileName, format, outCameraDirectory);
     }
 
     /**
@@ -61,24 +68,42 @@ public class PictureFileUtils {
      * @param type
      * @param fileName
      * @param format
+     * @param outCameraDirectory
      * @return
      */
     @Nullable
-    private static File createMediaFile(Context context, int chooseMode, String fileName, String format) {
-        return createOutFile(context, chooseMode, fileName, format);
+    private static File createMediaFile(Context context, int chooseMode, String fileName, String format, String outCameraDirectory) {
+        return createOutFile(context, chooseMode, fileName, format, outCameraDirectory);
     }
 
     @Nullable
-    private static File createOutFile(Context context, int chooseMode, String fileName, String format) {
-        String state = Environment.getExternalStorageState();
-        File rootDir = state.equals(Environment.MEDIA_MOUNTED) ? Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
-                : getRootDirFile(context, chooseMode);
-        if (rootDir != null && !rootDir.exists() && rootDir.mkdirs()) {
+    private static File createOutFile(Context context, int chooseMode, String fileName, String format, String outCameraDirectory) {
+        File folderDir = null;
+        if (TextUtils.isEmpty(outCameraDirectory)) {
+            // 外部没有自定义拍照存储路径使用默认
+            String state = Environment.getExternalStorageState();
+            File rootDir = state.equals(Environment.MEDIA_MOUNTED) ? Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
+                    : getRootDirFile(context, chooseMode);
+            if (rootDir != null) {
+                if (!rootDir.exists()) {
+                    rootDir.mkdirs();
+                }
+                folderDir = new File(rootDir.getAbsolutePath() + File.separator + "Camera" + File.separator);
+                if (!folderDir.exists() && folderDir.mkdirs()) {
+                }
+            }
+        } else {
+            // 自定义存储路径
+            folderDir = new File(outCameraDirectory);
+            if (!folderDir.exists()) {
+                folderDir.mkdirs();
+            }
         }
 
-        File folderDir = new File(rootDir.getAbsolutePath() + File.separator + "Camera" + File.separator);
-        if (folderDir != null && !folderDir.exists() && folderDir.mkdirs()) {
+        if (folderDir == null) {
+            throw new NullPointerException("The media output path cannot be null");
         }
+
         boolean isOutFileNameEmpty = TextUtils.isEmpty(fileName);
         switch (chooseMode) {
             case PictureConfig.TYPE_VIDEO:
@@ -304,6 +329,76 @@ public class PictureFileUtils {
         }
     }
 
+    /**
+     * 拷贝文件
+     *
+     * @param outFile
+     * @return
+     */
+    public static boolean bufferCopy(BufferedSource inBuffer, File outFile) {
+        BufferedSink outBuffer = null;
+        try {
+            outBuffer = Okio.buffer(Okio.sink(outFile));
+            outBuffer.writeAll(inBuffer);
+            outBuffer.flush();
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            close(inBuffer);
+            close(outBuffer);
+        }
+        return false;
+    }
+
+    /**
+     * 拷贝文件
+     *
+     * @param outputStream
+     * @return
+     */
+    public static boolean bufferCopy(BufferedSource inBuffer, OutputStream outputStream) {
+        BufferedSink outBuffer = null;
+        try {
+            outBuffer = Okio.buffer(Okio.sink(outputStream));
+            outBuffer.writeAll(inBuffer);
+            outBuffer.flush();
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            close(inBuffer);
+            close(outBuffer);
+        }
+        return false;
+    }
+
+
+    /**
+     * 拷贝文件
+     *
+     * @param inFile
+     * @param outPutStream
+     * @return
+     */
+    public static boolean bufferCopy(File inFile, OutputStream outPutStream) {
+        BufferedSource inBuffer = null;
+        BufferedSink outBuffer = null;
+        try {
+            inBuffer = Okio.buffer(Okio.source(inFile));
+            outBuffer = Okio.buffer(Okio.sink(outPutStream));
+            outBuffer.writeAll(inBuffer);
+            outBuffer.flush();
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            close(inBuffer);
+            close(outPutStream);
+            close(outBuffer);
+        }
+        return false;
+    }
 
     /**
      * 读取图片属性：旋转的角度
@@ -431,49 +526,15 @@ public class PictureFileUtils {
     }
 
     /**
-     * Copies one file into the other with the given paths.
-     * In the event that the paths are the same, trying to copy one file to the other
-     * will cause both files to become null.
-     * Simply skipping this step if the paths are identical.
-     */
-    public static boolean copyFile(FileInputStream fileInputStream, File outFile) throws IOException {
-        if (fileInputStream == null) {
-            return false;
-        }
-        FileChannel inputChannel = null;
-        FileChannel outputChannel = null;
-        FileOutputStream fileOutputStream = null;
-        try {
-            inputChannel = fileInputStream.getChannel();
-            fileOutputStream = new FileOutputStream(outFile);
-            outputChannel = fileOutputStream.getChannel();
-            inputChannel.transferTo(0, inputChannel.size(), outputChannel);
-            inputChannel.close();
-            return true;
-        } catch (Exception e) {
-            return false;
-        } finally {
-            if (fileInputStream != null) {
-                fileInputStream.close();
-            }
-            if (fileOutputStream != null) {
-                fileOutputStream.close();
-            }
-            if (inputChannel != null) {
-                inputChannel.close();
-            }
-            if (outputChannel != null) {
-                outputChannel.close();
-            }
-        }
-    }
-
-    /**
      * @param ctx
      * @return
      */
     public static String getDiskCacheDir(Context ctx) {
-        return ctx.getExternalFilesDir(Environment.DIRECTORY_PICTURES).getPath();
+        File filesDir = ctx.getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        if (filesDir == null) {
+            return "";
+        }
+        return filesDir.getPath();
     }
 
     /**
@@ -481,7 +542,11 @@ public class PictureFileUtils {
      * @return
      */
     public static String getVideoDiskCacheDir(Context ctx) {
-        return ctx.getExternalFilesDir(Environment.DIRECTORY_MOVIES).getPath();
+        File filesDir = ctx.getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+        if (filesDir == null) {
+            return "";
+        }
+        return filesDir.getPath();
     }
 
     /**
@@ -489,7 +554,11 @@ public class PictureFileUtils {
      * @return
      */
     public static String getAudioDiskCacheDir(Context ctx) {
-        return ctx.getExternalFilesDir(Environment.DIRECTORY_MUSIC).getPath();
+        File filesDir = ctx.getExternalFilesDir(Environment.DIRECTORY_MUSIC);
+        if (filesDir == null) {
+            return "";
+        }
+        return filesDir.getPath();
     }
 
     /**
@@ -528,6 +597,49 @@ public class PictureFileUtils {
         }
     }
 
+    /**
+     * 根据类型创建文件名
+     *
+     * @param context
+     * @param md5
+     * @param mineType
+     * @param customFileName
+     * @return
+     */
+    public static String createFilePath(Context context, String md5, String mineType, String customFileName) {
+        String suffix = PictureMimeType.getLastImgSuffix(mineType);
+        if (PictureMimeType.eqVideo(mineType)) {
+            // 视频
+            String filesDir = PictureFileUtils.getVideoDiskCacheDir(context) + File.separator;
+            if (!TextUtils.isEmpty(md5)) {
+                String fileName = TextUtils.isEmpty(customFileName) ? "VID_" + md5.toUpperCase() + suffix : customFileName;
+                return filesDir + fileName;
+            } else {
+                String fileName = TextUtils.isEmpty(customFileName) ? DateUtils.getCreateFileName("VID_") + suffix : customFileName;
+                return filesDir + fileName;
+            }
+        } else if (PictureMimeType.eqAudio(mineType)) {
+            // 音频
+            String filesDir = PictureFileUtils.getAudioDiskCacheDir(context) + File.separator;
+            if (!TextUtils.isEmpty(md5)) {
+                String fileName = TextUtils.isEmpty(customFileName) ? "AUD_" + md5.toUpperCase() + suffix : customFileName;
+                return filesDir + fileName;
+            } else {
+                String fileName = TextUtils.isEmpty(customFileName) ? DateUtils.getCreateFileName("AUD_") + suffix : customFileName;
+                return filesDir + fileName;
+            }
+        } else {
+            // 图片
+            String filesDir = PictureFileUtils.getDiskCacheDir(context) + File.separator;
+            if (!TextUtils.isEmpty(md5)) {
+                String fileName = TextUtils.isEmpty(customFileName) ? "IMG_" + md5.toUpperCase() + suffix : customFileName;
+                return filesDir + fileName;
+            } else {
+                String fileName = TextUtils.isEmpty(customFileName) ? DateUtils.getCreateFileName("IMG_") + suffix : customFileName;
+                return filesDir + fileName;
+            }
+        }
+    }
 
 
     @SuppressWarnings("ConstantConditions")

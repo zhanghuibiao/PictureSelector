@@ -16,6 +16,7 @@
 
 package androidx.camera.view;
 
+import android.os.Build;
 import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
@@ -26,9 +27,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.UiThread;
 import androidx.camera.core.Preview;
-import androidx.concurrent.futures.CallbackToFutureAdapter;
-
-import com.google.common.util.concurrent.ListenableFuture;
+import androidx.camera.core.SurfaceRequest;
+import androidx.core.content.ContextCompat;
 
 /**
  * The SurfaceView implementation for {@link PreviewView}.
@@ -43,25 +43,15 @@ final class SurfaceViewImplementation implements PreviewView.Implementation {
 
     // Synthetic Accessor
     @SuppressWarnings("WeakerAccess")
-    final CompleterWithSizeCallback mCompleterWithSizeCallback =
-            new CompleterWithSizeCallback();
+    final SurfaceRequestCallback mSurfaceRequestCallback =
+            new SurfaceRequestCallback();
 
-    private Preview.PreviewSurfaceProvider mPreviewSurfaceProvider =
-            new Preview.PreviewSurfaceProvider() {
-                @NonNull
+    private Preview.SurfaceProvider mSurfaceProvider =
+            new Preview.SurfaceProvider() {
                 @Override
-                public ListenableFuture<Surface> provideSurface(@NonNull Size resolution,
-                        @NonNull ListenableFuture<Void> surfaceReleaseFuture) {
-                    // No-op on surfaceReleaseFuture because the Surface will be destroyed by
-                    // SurfaceView.
-                    return CallbackToFutureAdapter.getFuture(
-                            completer -> {
-                                // Post to UI thread for thread safety.
-                                mSurfaceView.post(
-                                        () -> mCompleterWithSizeCallback.setCompleterAndSize(
-                                                completer, resolution));
-                                return "SurfaceViewSurfaceCreation";
-                            });
+                public void onSurfaceRequested(@NonNull SurfaceRequest surfaceRequest) {
+                    mSurfaceView.post(
+                            () -> mSurfaceRequestCallback.setSurfaceRequest(surfaceRequest));
                 }
             };
 
@@ -76,7 +66,7 @@ final class SurfaceViewImplementation implements PreviewView.Implementation {
                         FrameLayout.LayoutParams.MATCH_PARENT,
                         FrameLayout.LayoutParams.MATCH_PARENT));
         parent.addView(mSurfaceView);
-        mSurfaceView.getHolder().addCallback(mCompleterWithSizeCallback);
+        mSurfaceView.getHolder().addCallback(mSurfaceRequestCallback);
     }
 
     /**
@@ -84,8 +74,13 @@ final class SurfaceViewImplementation implements PreviewView.Implementation {
      */
     @NonNull
     @Override
-    public Preview.PreviewSurfaceProvider getPreviewSurfaceProvider() {
-        return mPreviewSurfaceProvider;
+    public Preview.SurfaceProvider getSurfaceProvider() {
+        return mSurfaceProvider;
+    }
+
+    @Override
+    public void onDisplayChanged() {
+
     }
 
     /**
@@ -94,18 +89,18 @@ final class SurfaceViewImplementation implements PreviewView.Implementation {
      * <p> SurfaceView creates Surface on its own before we can do anything. This class makes
      * sure only the Surface with correct size will be returned to Preview.
      */
-    class CompleterWithSizeCallback implements SurfaceHolder.Callback {
+    class SurfaceRequestCallback implements SurfaceHolder.Callback {
 
-        // Target Surface size. Only complete the ListenableFuture when the size of the Surface
+        // Target Surface size. Only complete the SurfaceRequest when the size of the Surface
         // matches this value.
         // Guarded by UI thread.
         @Nullable
         private Size mTargetSize;
 
-        // Completer to set when the target size is met.
+        // SurfaceRequest to set when the target size is met.
         // Guarded by UI thread.
         @Nullable
-        private CallbackToFutureAdapter.Completer<Surface> mCompleter;
+        private SurfaceRequest mSurfaceRequest;
 
         // The cached size of the current Surface.
         // Guarded by UI thread.
@@ -117,16 +112,18 @@ final class SurfaceViewImplementation implements PreviewView.Implementation {
          * the Surface matches the target size.
          */
         @UiThread
-        void setCompleterAndSize(CallbackToFutureAdapter.Completer<Surface> completer,
-                Size targetSize) {
-            cancelCompleter();
-            mCompleter = completer;
+        void setSurfaceRequest(@NonNull SurfaceRequest surfaceRequest) {
+            cancelPreviousRequest();
+            mSurfaceRequest = surfaceRequest;
+            Size targetSize = surfaceRequest.getResolution();
             mTargetSize = targetSize;
             if (!tryToComplete()) {
                 // The current size is incorrect. Wait for it to change.
                 Log.d(TAG, "Wait for new Surface creation.");
-                mSurfaceView.getHolder().setFixedSize(targetSize.getWidth(),
-                        targetSize.getHeight());
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    mSurfaceView.getHolder().setFixedSize(targetSize.getWidth(),
+                            targetSize.getHeight());
+                }
             }
         }
 
@@ -138,11 +135,13 @@ final class SurfaceViewImplementation implements PreviewView.Implementation {
         @UiThread
         private boolean tryToComplete() {
             Surface surface = mSurfaceView.getHolder().getSurface();
-            if (mCompleter != null && mTargetSize != null && mTargetSize.equals(
+            if (mSurfaceRequest != null && mTargetSize != null && mTargetSize.equals(
                     mCurrentSurfaceSize)) {
                 Log.d(TAG, "Surface set on Preview.");
-                mCompleter.set(surface);
-                mCompleter = null;
+                mSurfaceRequest.provideSurface(surface,
+                        ContextCompat.getMainExecutor(mSurfaceView.getContext()),
+                        (result) -> Log.d(TAG, "Safe to release surface."));
+                mSurfaceRequest = null;
                 mTargetSize = null;
                 return true;
             }
@@ -150,11 +149,11 @@ final class SurfaceViewImplementation implements PreviewView.Implementation {
         }
 
         @UiThread
-        private void cancelCompleter() {
-            if (mCompleter != null) {
-                Log.d(TAG, "Completer canceled.");
-                mCompleter.setCancelled();
-                mCompleter = null;
+        private void cancelPreviousRequest() {
+            if (mSurfaceRequest != null) {
+                Log.d(TAG, "Request canceled: " + mSurfaceRequest);
+                mSurfaceRequest.willNotProvideSurface();
+                mSurfaceRequest = null;
             }
             mTargetSize = null;
         }
@@ -176,7 +175,7 @@ final class SurfaceViewImplementation implements PreviewView.Implementation {
         public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
             Log.d(TAG, "Surface destroyed.");
             mCurrentSurfaceSize = null;
-            cancelCompleter();
+            cancelPreviousRequest();
         }
     }
 }

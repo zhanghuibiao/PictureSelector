@@ -15,12 +15,15 @@ import com.luck.picture.lib.config.PictureSelectionConfig;
 import com.luck.picture.lib.config.UCropOptions;
 import com.luck.picture.lib.engine.ImageEngine;
 import com.luck.picture.lib.entity.LocalMedia;
+import com.luck.picture.lib.engine.CacheResourcesEngine;
+import com.luck.picture.lib.listener.OnPictureSelectorInterfaceListener;
 import com.luck.picture.lib.listener.OnResultCallbackListener;
 import com.luck.picture.lib.listener.OnVideoSelectedPlayCallback;
 import com.luck.picture.lib.style.PictureCropParameterStyle;
 import com.luck.picture.lib.style.PictureParameterStyle;
 import com.luck.picture.lib.style.PictureWindowAnimationStyle;
 import com.luck.picture.lib.tools.DoubleUtils;
+import com.luck.picture.lib.tools.SdkVersionUtils;
 
 import java.lang.ref.WeakReference;
 import java.util.List;
@@ -86,8 +89,23 @@ public class PictureSelectionModel {
      * @return
      */
     public PictureSelectionModel loadImageEngine(ImageEngine engine) {
-        if (selectionConfig.imageEngine != engine) {
-            selectionConfig.imageEngine = engine;
+        if (PictureSelectionConfig.imageEngine != engine) {
+            PictureSelectionConfig.imageEngine = engine;
+        }
+        return this;
+    }
+
+    /**
+     * Only for Android version Q
+     *
+     * @param cacheResourcesEngine Image Cache
+     * @return
+     */
+    public PictureSelectionModel loadCacheResourcesCallback(CacheResourcesEngine cacheResourcesEngine) {
+        if (SdkVersionUtils.checkedAndroid_Q()) {
+            if (PictureSelectionConfig.cacheResourcesEngine != cacheResourcesEngine) {
+                PictureSelectionConfig.cacheResourcesEngine = new WeakReference<>(cacheResourcesEngine).get();
+            }
         }
         return this;
     }
@@ -124,7 +142,19 @@ public class PictureSelectionModel {
      * @return
      */
     public PictureSelectionModel bindCustomPlayVideoCallback(OnVideoSelectedPlayCallback callback) {
-        selectionConfig.customVideoPlayCallback = new WeakReference<>(callback).get();
+        PictureSelectionConfig.customVideoPlayCallback = new WeakReference<>(callback).get();
+        return this;
+    }
+
+    /**
+     * # The developer provides an additional callback interface to the user where the user can perform some custom actions
+     * {link 如果是自定义相机则必须使用.startActivityForResult(this,PictureConfig.REQUEST_CAMERA);方式启动否则PictureSelector处理不了相机后的回调}
+     *
+     * @param listener
+     * @return
+     */
+    public PictureSelectionModel bindPictureSelectorInterfaceListener(OnPictureSelectorInterfaceListener listener) {
+        PictureSelectionConfig.onPictureSelectorInterfaceListener = new WeakReference<>(listener).get();
         return this;
     }
 
@@ -283,8 +313,8 @@ public class PictureSelectionModel {
      */
     public PictureSelectionModel isWithVideoImage(boolean isWithVideoImage) {
         selectionConfig.isWithVideoImage =
-                selectionConfig.selectionMode == PictureConfig.SINGLE
-                        || selectionConfig.chooseMode != PictureMimeType.ofAll() ? false : isWithVideoImage;
+                selectionConfig.selectionMode != PictureConfig.SINGLE
+                        && selectionConfig.chooseMode == PictureMimeType.ofAll() && isWithVideoImage;
         return this;
     }
 
@@ -311,7 +341,7 @@ public class PictureSelectionModel {
      * @return
      */
     public PictureSelectionModel maxVideoSelectNum(int maxVideoSelectNum) {
-        selectionConfig.maxVideoSelectNum = selectionConfig.isWithVideoImage ? maxVideoSelectNum : 0;
+        selectionConfig.maxVideoSelectNum = maxVideoSelectNum;
         return this;
     }
 
@@ -331,9 +361,8 @@ public class PictureSelectionModel {
      */
     public PictureSelectionModel isSingleDirectReturn(boolean isSingleDirectReturn) {
         selectionConfig.isSingleDirectReturn = selectionConfig.selectionMode
-                == PictureConfig.SINGLE ? isSingleDirectReturn : false;
-        selectionConfig.isOriginalControl = selectionConfig.selectionMode
-                == PictureConfig.SINGLE && isSingleDirectReturn ? false : selectionConfig.isOriginalControl;
+                == PictureConfig.SINGLE && isSingleDirectReturn;
+        selectionConfig.isOriginalControl = (selectionConfig.selectionMode != PictureConfig.SINGLE || !isSingleDirectReturn) && selectionConfig.isOriginalControl;
         return this;
     }
 
@@ -603,15 +632,13 @@ public class PictureSelectionModel {
     }
 
     /**
-     * # Responding to the Q version of Android, it's all in the app
-     * sandbox so customizations are no longer provided
+     * Extra used with {@link #Environment.getExternalStorageDirectory() +  File.separator + "CustomCamera" + File.separator}  to indicate that
      *
-     * @param outputCameraPath Camera save path   由于Android Q的原因 其实此方法作用的意义就没了
+     * @param outPutCameraPath Camera save path 只支持Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
      * @return
      */
-    @Deprecated
-    public PictureSelectionModel setOutputCameraPath(String outputCameraPath) {
-        selectionConfig.outputCameraPath = outputCameraPath;
+    public PictureSelectionModel setOutputCameraPath(String outPutCameraPath) {
+        selectionConfig.outPutCameraPath = outPutCameraPath;
         return this;
     }
 
@@ -1001,7 +1028,7 @@ public class PictureSelectionModel {
                 return;
             }
             // 绑定回调监听
-            selectionConfig.listener = new WeakReference<>(listener).get();
+            PictureSelectionConfig.listener = new WeakReference<>(listener).get();
 
             Intent intent;
             if (selectionConfig.camera && selectionConfig.isUseCustomCamera) {
@@ -1039,7 +1066,7 @@ public class PictureSelectionModel {
                 return;
             }
             // 绑定回调监听
-            selectionConfig.listener = new WeakReference<>(listener).get();
+            PictureSelectionConfig.listener = new WeakReference<>(listener).get();
             Intent intent;
             if (selectionConfig.camera && selectionConfig.isUseCustomCamera) {
                 intent = new Intent(activity, PictureCustomCameraActivity.class);

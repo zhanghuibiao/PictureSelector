@@ -1,20 +1,19 @@
 package com.luck.picture.lib.adapter;
 
 import android.content.Context;
-
-import androidx.recyclerview.widget.RecyclerView;
-
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.recyclerview.widget.RecyclerView;
+
 import com.luck.picture.lib.R;
 import com.luck.picture.lib.config.PictureMimeType;
 import com.luck.picture.lib.config.PictureSelectionConfig;
-import com.luck.picture.lib.entity.LocalMedia;
 import com.luck.picture.lib.entity.LocalMediaFolder;
+import com.luck.picture.lib.listener.OnAlbumItemClickListener;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,8 +67,8 @@ public class PictureAlbumDirectoryAdapter extends RecyclerView.Adapter<PictureAl
         if (chooseMode == PictureMimeType.ofAudio()) {
             holder.ivFirstImage.setImageResource(R.drawable.picture_audio_placeholder);
         } else {
-            if (config.imageEngine != null) {
-                config.imageEngine.loadFolderImage(holder.itemView.getContext(),
+            if (PictureSelectionConfig.imageEngine != null) {
+                PictureSelectionConfig.imageEngine.loadFolderImage(holder.itemView.getContext(),
                         imagePath, holder.ivFirstImage);
             }
         }
@@ -79,7 +78,7 @@ public class PictureAlbumDirectoryAdapter extends RecyclerView.Adapter<PictureAl
                 : context.getString(R.string.picture_camera_roll) : name;
         holder.tvFolderName.setText(context.getString(R.string.picture_camera_roll_num, firstTitle, imageNum));
         holder.itemView.setOnClickListener(view -> {
-            if (onItemClickListener != null) {
+            if (onAlbumItemClickListener != null) {
                 int size = folders.size();
                 for (int i = 0; i < size; i++) {
                     LocalMediaFolder mediaFolder = folders.get(i);
@@ -87,7 +86,7 @@ public class PictureAlbumDirectoryAdapter extends RecyclerView.Adapter<PictureAl
                 }
                 folder.setChecked(true);
                 notifyDataSetChanged();
-                onItemClickListener.onItemClick(folder.isCameraFolder(), folder.getName(), folder.getImages());
+                onAlbumItemClickListener.onItemClick(folder.isCameraFolder(), folder.getName(), folder.getImages());
             }
         });
     }
@@ -112,13 +111,9 @@ public class PictureAlbumDirectoryAdapter extends RecyclerView.Adapter<PictureAl
         }
     }
 
-    private OnItemClickListener onItemClickListener;
+    private OnAlbumItemClickListener onAlbumItemClickListener;
 
-    public void setOnItemClickListener(OnItemClickListener onItemClickListener) {
-        this.onItemClickListener = onItemClickListener;
-    }
-
-    public interface OnItemClickListener {
-        void onItemClick(boolean isCameraFolder, String folderName, List<LocalMedia> images);
+    public void setOnAlbumItemClickListener(OnAlbumItemClickListener listener) {
+        this.onAlbumItemClickListener = listener;
     }
 }

@@ -13,6 +13,7 @@ import androidx.core.content.ContextCompat;
 
 import com.luck.picture.lib.config.PictureConfig;
 import com.luck.picture.lib.config.PictureMimeType;
+import com.luck.picture.lib.config.PictureSelectionConfig;
 import com.luck.picture.lib.entity.LocalMedia;
 import com.luck.picture.lib.immersive.ImmersiveManage;
 import com.luck.picture.lib.permissions.PermissionChecker;
@@ -45,7 +46,7 @@ public class PictureSelectorCameraEmptyActivity extends PictureBaseActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        if (!config.isUseCustomCamera) {
+        if (!config.isUseCustomCamera && PictureSelectionConfig.onPictureSelectorInterfaceListener == null) {
             if (savedInstanceState == null) {
                 if (PermissionChecker
                         .checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) &&
@@ -77,7 +78,17 @@ public class PictureSelectorCameraEmptyActivity extends PictureBaseActivity {
         // 启动相机拍照,先判断手机是否有拍照权限
         if (PermissionChecker
                 .checkSelfPermission(this, Manifest.permission.CAMERA)) {
-            startCamera();
+            boolean isPermissionChecker = true;
+            if (config.isUseCustomCamera) {
+                isPermissionChecker = PermissionChecker.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO);
+            }
+            if (isPermissionChecker) {
+                startCamera();
+            } else {
+                PermissionChecker
+                        .requestPermissions(this,
+                                new String[]{Manifest.permission.RECORD_AUDIO}, PictureConfig.APPLY_RECORD_AUDIO_PERMISSIONS_CODE);
+            }
         } else {
             PermissionChecker.requestPermissions(this,
                     new String[]{Manifest.permission.CAMERA}, PictureConfig.APPLY_CAMERA_PERMISSIONS_CODE);
@@ -143,6 +154,9 @@ public class PictureSelectorCameraEmptyActivity extends PictureBaseActivity {
         }
         List<LocalMedia> medias = new ArrayList<>();
         Uri resultUri = UCrop.getOutput(data);
+        if (resultUri == null) {
+            return;
+        }
         String cutPath = resultUri.getPath();
         // 单独拍照
         LocalMedia media = new LocalMedia(config.cameraPath, 0, false,
@@ -153,9 +167,9 @@ public class PictureSelectorCameraEmptyActivity extends PictureBaseActivity {
             media.setAndroidQToPath(cutPath);
             if (TextUtils.isEmpty(cutPath)) {
                 media.setCut(false);
-                if (SdkVersionUtils.checkedAndroid_Q() && config.cameraPath.startsWith("content://")) {
+                if (SdkVersionUtils.checkedAndroid_Q() && PictureMimeType.isContent(config.cameraPath)) {
                     String path = PictureFileUtils.getPath(this, Uri.parse(config.cameraPath));
-                    media.setSize(new File(path).length());
+                    media.setSize(!TextUtils.isEmpty(path) ? new File(path).length() : 0);
                 } else {
                     media.setSize(new File(config.cameraPath).length());
                 }
@@ -204,10 +218,7 @@ public class PictureSelectorCameraEmptyActivity extends PictureBaseActivity {
         int[] newSize = new int[2];
         if (!isAndroidQ) {
             if (config.isFallbackVersion3) {
-                new PictureMediaScannerConnection(getContext(), config.cameraPath,
-                        () -> {
-
-                        });
+                new PictureMediaScannerConnection(getContext(), config.cameraPath);
             } else {
                 sendBroadcast(new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(new File(config.cameraPath))));
             }
@@ -215,11 +226,11 @@ public class PictureSelectorCameraEmptyActivity extends PictureBaseActivity {
         LocalMedia media = new LocalMedia();
         if (config.chooseMode != PictureMimeType.ofAudio()) {
             // 图片视频处理规则
-            if (config.cameraPath.startsWith("content://")) {
+            if (PictureMimeType.isContent(config.cameraPath)) {
                 String path = PictureFileUtils.getPath(getApplicationContext(), Uri.parse(config.cameraPath));
                 File file = new File(path);
                 size = file.length();
-                mimeType = PictureMimeType.getMimeType(file);
+                mimeType = PictureMimeType.getMimeType(config.cameraMimeType);
                 if (PictureMimeType.eqImage(mimeType)) {
                     newSize = MediaUtils.getLocalImageSizeToAndroidQ(this, config.cameraPath);
                 } else {
@@ -229,14 +240,16 @@ public class PictureSelectorCameraEmptyActivity extends PictureBaseActivity {
                 int lastIndexOf = config.cameraPath.lastIndexOf("/") + 1;
                 media.setId(lastIndexOf > 0 ? ValueOf.toLong(config.cameraPath.substring(lastIndexOf)) : -1);
                 media.setRealPath(path);
-                if (config.isUseCustomCamera && data != null) {
+                if (config.isUseCustomCamera) {
                     // 自定义拍照时已经在应用沙盒内生成了文件
-                    String mediaPath = data.getStringExtra(PictureConfig.EXTRA_MEDIA_PATH);
-                    media.setAndroidQToPath(mediaPath);
+                    if (data != null) {
+                        String mediaPath = data.getStringExtra(PictureConfig.EXTRA_MEDIA_PATH);
+                        media.setAndroidQToPath(mediaPath);
+                    }
                 }
             } else {
                 final File file = new File(config.cameraPath);
-                mimeType = PictureMimeType.getMimeType(file);
+                mimeType = PictureMimeType.getMimeType(config.cameraMimeType);
                 size = file.length();
                 if (PictureMimeType.eqImage(mimeType)) {
                     int degree = PictureFileUtils.readPictureDegree(this, config.cameraPath);
@@ -260,9 +273,9 @@ public class PictureSelectorCameraEmptyActivity extends PictureBaseActivity {
         cameraHandleResult(media, mimeType);
         // 这里主要解决极个别手机拍照会在DCIM目录重复生成一张照片问题
         if (!isAndroidQ && PictureMimeType.eqImage(media.getMimeType())) {
-            int lastImageId = getLastImageId(media.getMimeType());
+            int lastImageId = MediaUtils.getLastImageId(getContext(), media.getMimeType());
             if (lastImageId != -1) {
-                removeMedia(lastImageId);
+                MediaUtils.removeMedia(getContext(), lastImageId);
             }
         }
     }
@@ -305,7 +318,7 @@ public class PictureSelectorCameraEmptyActivity extends PictureBaseActivity {
         switch (requestCode) {
             case PictureConfig.APPLY_STORAGE_PERMISSIONS_CODE:
                 // 存储权限
-                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     PermissionChecker.requestPermissions(this,
                             new String[]{Manifest.permission.CAMERA}, PictureConfig.APPLY_CAMERA_PERMISSIONS_CODE);
                 } else {
@@ -315,11 +328,20 @@ public class PictureSelectorCameraEmptyActivity extends PictureBaseActivity {
                 break;
             case PictureConfig.APPLY_CAMERA_PERMISSIONS_CODE:
                 // 相机权限
-                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                     onTakePhoto();
                 } else {
                     closeActivity();
                     ToastUtils.s(getContext(), getString(R.string.picture_camera));
+                }
+                break;
+            case PictureConfig.APPLY_RECORD_AUDIO_PERMISSIONS_CODE:
+                // 录音权限
+                if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    onTakePhoto();
+                } else {
+                    closeActivity();
+                    ToastUtils.s(getContext(), getString(R.string.picture_audio));
                 }
                 break;
         }

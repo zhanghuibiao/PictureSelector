@@ -10,6 +10,7 @@ public final class PictureConfig {
     public final static int APPLY_CAMERA_PERMISSIONS_CODE = 2;
     public final static int APPLY_AUDIO_PERMISSIONS_CODE = 3;
     public final static int APPLY_RECORD_AUDIO_PERMISSIONS_CODE = 4;
+    public final static int APPLY_CAMERA_STORAGE_PERMISSIONS_CODE = 5;
 
     public final static String EXTRA_MEDIA_KEY = "mediaKey";
     public final static String EXTRA_MEDIA_PATH = "mediaPath";
@@ -29,11 +30,12 @@ public final class PictureConfig {
     public final static String EXTRA_DIRECTORY_PATH = "directory_path";
     public final static String EXTRA_BOTTOM_PREVIEW = "bottom_preview";
     public final static String EXTRA_CONFIG = "PictureSelectorConfig";
+    public final static String EXTRA_SHOW_CAMERA = "isShowCamera";
+    public final static String EXTRA_IS_CURRENT_DIRECTORY = "currentDirectory";
 
     public final static String CAMERA_FACING = "android.intent.extras.CAMERA_FACING";
 
     public final static int CAMERA_BEFORE = 1;
-    public final static int CAMERA_AFTER = 2;
 
     public final static int TYPE_ALL = 0;
     public final static int TYPE_IMAGE = 1;

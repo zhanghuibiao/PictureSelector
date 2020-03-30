@@ -11,6 +11,7 @@ import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Parcelable;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.animation.AccelerateInterpolator;
@@ -38,6 +39,7 @@ import com.luck.picture.lib.config.PictureMimeType;
 import com.luck.picture.lib.decoration.GridSpacingItemDecoration;
 import com.luck.picture.lib.entity.LocalMedia;
 import com.luck.picture.lib.language.LanguageConfig;
+import com.luck.picture.lib.listener.OnPictureSelectorInterfaceListener;
 import com.luck.picture.lib.listener.OnResultCallbackListener;
 import com.luck.picture.lib.listener.OnVideoSelectedPlayCallback;
 import com.luck.picture.lib.permissions.PermissionChecker;
@@ -169,9 +171,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 tv_original_tips.setVisibility(isChecked ? View.VISIBLE : View.GONE));
         cb_choose_mode.setOnCheckedChangeListener((buttonView, isChecked) -> {
             cb_single_back.setVisibility(isChecked ? View.GONE : View.VISIBLE);
-            cb_single_back.setChecked(isChecked ? false : cb_single_back.isChecked());
+            cb_single_back.setChecked(!isChecked && cb_single_back.isChecked());
         });
-        mAdapter.setOnItemClickListener((position, v) -> {
+        mAdapter.setOnItemClickListener((v, position) -> {
             List<LocalMedia> selectList = mAdapter.getData();
             if (selectList.size() > 0) {
                 LocalMedia media = selectList.get(position);
@@ -183,13 +185,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         PictureSelector.create(MainActivity.this)
                                 .themeStyle(R.style.picture_default_style)
                                 .setPictureStyle(mPictureParameterStyle)// 动态自定义相册主题
-                                .externalPictureVideo(media.getPath());
+                                .externalPictureVideo(TextUtils.isEmpty(media.getAndroidQToPath()) ? media.getPath() : media.getAndroidQToPath());
                         break;
                     case PictureConfig.TYPE_AUDIO:
                         // 预览音频
                         PictureSelector.create(MainActivity.this)
-                                .externalPictureAudio(
-                                        media.getPath().startsWith("content://") ? media.getAndroidQToPath() : media.getPath());
+                                .externalPictureAudio(PictureMimeType.isContent(media.getPath()) ? media.getAndroidQToPath() : media.getPath());
                         break;
                     default:
                         // 预览图片 可自定长按保存路径
@@ -426,6 +427,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         .setPictureCropStyle(mCropParameterStyle)// 动态自定义裁剪主题
                         .setPictureWindowAnimationStyle(mWindowAnimationStyle)// 自定义相册启动退出动画
                         .isWithVideoImage(true)// 图片和视频是否可以同选,只在ofAll模式下有效
+                        .loadCacheResourcesCallback(GlideCacheEngine.createCacheEngine())// 获取图片资源缓存，主要是解决华为10部分机型在拷贝文件过多时会出现卡的问题，这里可以判断只在会出现一直转圈问题机型上使用
+                        //.setOutputCameraPath()// 自定义相机输出目录，只针对Android Q以下，例如 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM) +  File.separator + "Camera" + File.separator;
                         //.setButtonFeatures(CustomCameraView.BUTTON_STATE_BOTH)// 设置自定义相机按钮状态
                         .maxSelectNum(maxSelectNum)// 最大图片选择数量
                         .minSelectNum(1)// 最小选择数量
@@ -437,6 +440,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         .setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT)// 设置相册Activity方向，不设置默认使用系统
                         .isOriginalImageControl(cb_original.isChecked())// 是否显示原图控制按钮，如果设置为true则用户可以自由选择是否使用原图，压缩、裁剪功能将会失效
                         //.bindCustomPlayVideoCallback(callback)// 自定义视频播放回调控制，用户可以使用自己的视频播放界面
+                        //.bindPictureSelectorInterfaceListener(interfaceListener)// 提供给用户的一些额外的自定义操作回调
                         //.cameraFileName(System.currentTimeMillis() +".jpg")    // 重命名拍照文件名、如果是相册拍照则内部会自动拼上当前时间戳防止重复，注意这个只在使用相机时可以使用，如果使用相机又开启了压缩或裁剪 需要配合压缩和裁剪文件名api
                         //.renameCompressFile(System.currentTimeMillis() +".jpg")// 重命名压缩文件名、 注意这个不要重复，只适用于单张图压缩使用
                         //.renameCropFileName(System.currentTimeMillis() + ".jpg")// 重命名裁剪文件名、 注意这个不要重复，只适用于单张图裁剪使用
@@ -462,7 +466,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         //.sizeMultiplier(0.5f)// glide 加载图片大小 0~1之间 如设置 .glideOverride()无效 注：已废弃
                         //.glideOverride(160, 160)// glide 加载宽高，越小图片列表越流畅，但会影响列表图片浏览的清晰度 注：已废弃
                         .withAspectRatio(aspect_ratio_x, aspect_ratio_y)// 裁剪比例 如16:9 3:2 3:4 1:1 可自定义
-                        .hideBottomControls(cb_hide.isChecked() ? false : true)// 是否显示uCrop工具栏，默认不显示
+                        .hideBottomControls(!cb_hide.isChecked())// 是否显示uCrop工具栏，默认不显示
                         .isGif(cb_isGif.isChecked())// 是否显示gif图片
                         .freeStyleCropEnabled(cb_styleCrop.isChecked())// 裁剪框是否可拖拽
                         .circleDimmedLayer(cb_crop_circular.isChecked())// 是否圆形裁剪
@@ -488,7 +492,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         //.videoQuality()// 视频录制质量 0 or 1
                         //.videoSecond()//显示多少秒以内的视频or音频也可适用
                         //.forResult(PictureConfig.CHOOSE_REQUEST);//结果回调onActivityResult code
-                        .forResult(new OnResultCallbackListener() {
+                        .forResult(new OnResultCallbackListener<LocalMedia>() {
                             @Override
                             public void onResult(List<LocalMedia> result) {
                                 for (LocalMedia media : result) {
@@ -522,6 +526,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         .setPictureWindowAnimationStyle(mWindowAnimationStyle)// 自定义相册启动退出动画
                         .maxSelectNum(maxSelectNum)// 最大图片选择数量
                         .isUseCustomCamera(cb_custom_camera.isChecked())// 是否使用自定义相机
+                        //.setOutputCameraPath()// 自定义相机输出目录，只针对Android Q以下，例如 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM) +  File.separator + "Camera" + File.separator;
                         .minSelectNum(1)// 最小选择数量
                         //.querySpecifiedFormatSuffix(PictureMimeType.ofPNG())// 查询指定后缀格式资源
                         .selectionMode(cb_choose_mode.isChecked() ?
@@ -529,6 +534,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         //.cameraFileName(System.currentTimeMillis() + ".jpg")// 使用相机时保存至本地的文件名称,注意这个只在拍照时可以使用
                         //.renameCompressFile(System.currentTimeMillis() + ".jpg")// 重命名压缩文件名、 注意这个不要重复，只适用于单张图压缩使用
                         //.renameCropFileName(System.currentTimeMillis() + ".jpg")// 重命名裁剪文件名、 注意这个不要重复，只适用于单张图裁剪使用
+                        .loadCacheResourcesCallback(GlideCacheEngine.createCacheEngine())// 获取图片资源缓存，主要是解决华为10部分机型在拷贝文件过多时会出现卡的问题，这里可以判断只在会出现一直转圈问题机型上使用
                         .previewImage(cb_preview_img.isChecked())// 是否可预览图片
                         .previewVideo(cb_preview_video.isChecked())// 是否可预览视频
                         .enablePreviewAudio(cb_preview_audio.isChecked()) // 是否可播放音频
@@ -539,7 +545,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         .compressQuality(60)// 图片压缩后输出质量
                         .glideOverride(160, 160)// glide 加载宽高，越小图片列表越流畅，但会影响列表图片浏览的清晰度
                         .withAspectRatio(aspect_ratio_x, aspect_ratio_y)// 裁剪比例 如16:9 3:2 3:4 1:1 可自定义
-                        .hideBottomControls(cb_hide.isChecked() ? false : true)// 是否显示uCrop工具栏，默认不显示
+                        .hideBottomControls(!cb_hide.isChecked())// 是否显示uCrop工具栏，默认不显示
                         .isGif(cb_isGif.isChecked())// 是否显示gif图片
                         .freeStyleCropEnabled(cb_styleCrop.isChecked())// 裁剪框是否可拖拽
                         .circleDimmedLayer(cb_crop_circular.isChecked())// 是否圆形裁剪
@@ -591,6 +597,41 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      * 自定义播放逻辑处理，用户可以自己实现播放界面
      */
     private OnVideoSelectedPlayCallback callback = media -> ToastUtils.s(getContext(), media.getPath());
+
+    /**
+     * PictureSelector自定义的一些回调接口
+     */
+    private OnPictureSelectorInterfaceListener interfaceListener = (context, config, type) -> {
+        // TODO  必须使用context.startActivityForResult(activity.class,PictureConfig.REQUEST_CAMERA);
+
+        // TODO 注意:使用自定义相机时，需要设置PictureSelectionConfig两个值
+        //  1、config.cameraPath (文件输出路径)
+        //  2、 config.cameraMimeType (相机类型 图片or视频)
+        switch (type) {
+            case PictureConfig.TYPE_IMAGE:
+                // 拍照
+//                    if (context instanceof Activity) {
+//                        Intent intent = new Intent(context, PictureCustomCameraActivity.class);
+//                        ((Activity) context).startActivityForResult(intent, PictureConfig.REQUEST_CAMERA);
+//                        PictureWindowAnimationStyle windowAnimationStyle = mWindowAnimationStyle;
+//                        ((Activity) context).overridePendingTransition(windowAnimationStyle != null &&
+//                                windowAnimationStyle.activityEnterAnimation != 0 ?
+//                                windowAnimationStyle.activityEnterAnimation : R.anim.picture_anim_enter, R.anim.picture_anim_fade_in);
+//                    }
+                ToastUtils.s(getContext(), "Click Camera Image");
+                break;
+            case PictureConfig.TYPE_VIDEO:
+                // 录视频
+                ToastUtils.s(getContext(), "Click Camera Video");
+                break;
+            case PictureConfig.TYPE_AUDIO:
+                // 录音
+                ToastUtils.s(getContext(), "Click Camera Recording");
+                break;
+            default:
+                break;
+        }
+    };
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {

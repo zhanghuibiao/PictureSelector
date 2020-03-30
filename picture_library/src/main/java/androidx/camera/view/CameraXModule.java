@@ -16,42 +16,38 @@
 
 package androidx.camera.view;
 
+import static androidx.camera.core.ImageCapture.FLASH_MODE_OFF;
+
 import android.Manifest.permission;
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.graphics.Matrix;
-import android.graphics.SurfaceTexture;
-import android.os.Looper;
 import android.util.Log;
 import android.util.Rational;
 import android.util.Size;
-import android.view.Surface;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresPermission;
-import androidx.annotation.UiThread;
 import androidx.camera.core.AspectRatio;
 import androidx.camera.core.Camera;
-import androidx.camera.core.CameraOrientationUtil;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.CameraX;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.ImageCapture.OnImageCapturedCallback;
 import androidx.camera.core.ImageCapture.OnImageSavedCallback;
-import androidx.camera.core.LensFacingConverter;
 import androidx.camera.core.Preview;
 import androidx.camera.core.TorchState;
 import androidx.camera.core.UseCase;
 import androidx.camera.core.VideoCapture;
 import androidx.camera.core.VideoCapture.OnVideoSavedCallback;
-import androidx.camera.core.VideoCaptureConfig;
+import androidx.camera.core.impl.LensFacingConverter;
+import androidx.camera.core.impl.VideoCaptureConfig;
+import androidx.camera.core.impl.utils.CameraOrientationUtil;
 import androidx.camera.core.impl.utils.executor.CameraXExecutors;
 import androidx.camera.core.impl.utils.futures.FutureCallback;
 import androidx.camera.core.impl.utils.futures.Futures;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.CameraView.CaptureMode;
-import androidx.concurrent.futures.CallbackToFutureAdapter;
 import androidx.core.util.Preconditions;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleObserver;
@@ -71,8 +67,6 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static androidx.camera.core.ImageCapture.FLASH_MODE_OFF;
-
 /**
  * CameraX use case operation built on @{link androidx.camera.core}.
  */
@@ -89,9 +83,9 @@ final class CameraXModule {
     private final Preview.Builder mPreviewBuilder;
     private final VideoCaptureConfig.Builder mVideoCaptureConfigBuilder;
     private final ImageCapture.Builder mImageCaptureBuilder;
-    private WeakReference<CameraView> mCameraViewWeakReference;
+    private WeakReference<CameraView> mWeakReferenceCameraView;
     final AtomicBoolean mVideoIsRecording = new AtomicBoolean(false);
-    private CaptureMode mCaptureMode = CaptureMode.IMAGE;
+    private CameraView.CaptureMode mCaptureMode = CaptureMode.IMAGE;
     private long mMaxVideoDuration = CameraView.INDEFINITE_VIDEO_DURATION;
     private long mMaxVideoSize = CameraView.INDEFINITE_VIDEO_SIZE;
     @ImageCapture.FlashMode
@@ -99,9 +93,6 @@ final class CameraXModule {
     @Nullable
     @SuppressWarnings("WeakerAccess") /* synthetic accessor */
             Camera mCamera;
-    @Nullable
-    @SuppressWarnings("WeakerAccess") /* synthetic accessor */
-            CallbackToFutureAdapter.Completer<Size> mResolutionUpdateCompleter;
     @Nullable
     private ImageCapture mImageCapture;
     @Nullable
@@ -118,7 +109,7 @@ final class CameraXModule {
                 public void onDestroy(LifecycleOwner owner) {
                     if (owner == mCurrentLifecycle) {
                         clearCurrentLifecycle();
-                        mPreview.setPreviewSurfaceProvider(null);
+                        mPreview.setSurfaceProvider(null);
                     }
                 }
             };
@@ -132,7 +123,7 @@ final class CameraXModule {
     ProcessCameraProvider mCameraProvider;
 
     CameraXModule(CameraView view) {
-        mCameraViewWeakReference = new WeakReference<>(view);
+        mWeakReferenceCameraView = new WeakReference<>(view);
         Futures.addCallback(ProcessCameraProvider.getInstance(getCameraView().getContext()),
                 new FutureCallback<ProcessCameraProvider>() {
                     // TODO(b/124269166): Rethink how we can handle permissions here.
@@ -169,10 +160,6 @@ final class CameraXModule {
         }
     }
 
-    private CameraView getCameraView() {
-        return mCameraViewWeakReference.get();
-    }
-
     @RequiresPermission(permission.CAMERA)
     void bindToLifecycleAfterViewMeasured() {
         if (mNewLifecycle == null) {
@@ -191,12 +178,6 @@ final class CameraXModule {
             // try again once the camera provider is no longer null
             return;
         }
-
-        ListenableFuture<Size> resolutionUpdateFuture = CallbackToFutureAdapter.getFuture(
-                completer -> {
-                    mResolutionUpdateCompleter = completer;
-                    return "PreviewResolutionUpdate";
-                });
 
         Set<Integer> available = getAvailableCameraLensFacing();
 
@@ -249,24 +230,7 @@ final class CameraXModule {
         mPreviewBuilder.setTargetResolution(new Size(getMeasuredWidth(), height));
 
         mPreview = mPreviewBuilder.build();
-        mPreview.setPreviewSurfaceProvider((resolution, safeToCancelFuture) -> {
-            // The PreviewSurfaceProvider#createSurfaceFuture() might come asynchronously.
-            // It cannot guarantee the callback time, so we store the resolution result in
-            // the listenableFuture.
-            mResolutionUpdateCompleter.set(resolution);
-            // Create SurfaceTexture and Surface.
-            SurfaceTexture surfaceTexture = new FixedSizeSurfaceTexture(0, resolution);
-            surfaceTexture.setDefaultBufferSize(resolution.getWidth(),
-                    resolution.getHeight());
-            surfaceTexture.detachFromGLContext();
-            CameraXModule.this.setSurfaceTexture(surfaceTexture);
-            Surface surface = new Surface(surfaceTexture);
-            safeToCancelFuture.addListener(() -> {
-                surface.release();
-                surfaceTexture.release();
-            }, CameraXExecutors.directExecutor());
-            return Futures.immediateFuture(surface);
-        });
+        mPreview.setSurfaceProvider(getCameraView().getPreviewView().getPreviewSurfaceProvider());
 
         CameraSelector cameraSelector =
                 new CameraSelector.Builder().requireLensFacing(mCameraLensFacing).build();
@@ -283,31 +247,6 @@ final class CameraXModule {
                     mImageCapture,
                     mVideoCapture, mPreview);
         }
-
-        // Register the listener on the resolutionUpdateFuture, and we can get the resolution
-        // result immediately if it has been set or it will callback once the resolution result
-        // is ready.
-        Futures.addCallback(resolutionUpdateFuture, new FutureCallback<Size>() {
-            @Override
-            public void onSuccess(@Nullable Size result) {
-                if (result == null) {
-                    Log.w(TAG, "PreviewSourceDimensUpdate fail");
-                    return;
-                }
-
-                int cameraOrientation =
-                        mCamera != null ? mCamera.getCameraInfo().getSensorRotationDegrees() : 0;
-                boolean needReverse = cameraOrientation != 0 && cameraOrientation != 180;
-                int textureWidth = needReverse ? result.getHeight() : result.getWidth();
-                int textureHeight = needReverse ? result.getWidth() : result.getHeight();
-                onPreviewSourceDimensUpdated(textureWidth, textureHeight);
-            }
-
-            @Override
-            public void onFailure(Throwable t) {
-                Log.d(TAG, "PreviewSourceDimensUpdate fail", t);
-            }
-        }, CameraXExecutors.mainThreadExecutor());
 
         setZoomRatio(UNITY_ZOOM_SCALE);
         mCurrentLifecycle.getLifecycle().addObserver(mCurrentLifecycleObserver);
@@ -357,7 +296,10 @@ final class CameraXModule {
         ImageCapture.Metadata metadata = new ImageCapture.Metadata();
         metadata.setReversedHorizontal(
                 mCameraLensFacing != null && mCameraLensFacing == CameraSelector.LENS_FACING_FRONT);
-        mImageCapture.takePicture(saveLocation, metadata, executor, callback);
+        ImageCapture.OutputFileOptions outputFileOptions =
+                new ImageCapture.OutputFileOptions.Builder(saveLocation).setMetadata(
+                        metadata).build();
+        mImageCapture.takePicture(outputFileOptions, executor, callback);
     }
 
     public void startRecording(File file, Executor executor, final OnVideoSavedCallback callback) {
@@ -377,7 +319,7 @@ final class CameraXModule {
         mVideoCapture.startRecording(
                 file,
                 executor,
-                new OnVideoSavedCallback() {
+                new VideoCapture.OnVideoSavedCallback() {
                     @Override
                     public void onVideoSaved(@NonNull File savedFile) {
                         mVideoIsRecording.set(false);
@@ -470,7 +412,7 @@ final class CameraXModule {
 
     public float getZoomRatio() {
         if (mCamera != null) {
-            return mCamera.getCameraInfo().getZoomRatio().getValue();
+            return mCamera.getCameraInfo().getZoomState().getValue().getZoomRatio();
         } else {
             return UNITY_ZOOM_SCALE;
         }
@@ -478,7 +420,19 @@ final class CameraXModule {
 
     public void setZoomRatio(float zoomRatio) {
         if (mCamera != null) {
-            mCamera.getCameraControl().setZoomRatio(zoomRatio);
+            ListenableFuture<Void> future = mCamera.getCameraControl().setZoomRatio(
+                    zoomRatio);
+            Futures.addCallback(future, new FutureCallback<Void>() {
+                @Override
+                public void onSuccess(@Nullable Void result) {
+                }
+
+                @Override
+                public void onFailure(Throwable t) {
+                    // Throw the unexpected error.
+                    throw new RuntimeException(t);
+                }
+            }, CameraXExecutors.directExecutor());
         } else {
             Log.e(TAG, "Failed to set zoom ratio");
         }
@@ -486,7 +440,7 @@ final class CameraXModule {
 
     public float getMinZoomRatio() {
         if (mCamera != null) {
-            return mCamera.getCameraInfo().getMinZoomRatio().getValue();
+            return mCamera.getCameraInfo().getZoomState().getValue().getMinZoomRatio();
         } else {
             return UNITY_ZOOM_SCALE;
         }
@@ -494,7 +448,7 @@ final class CameraXModule {
 
     public float getMaxZoomRatio() {
         if (mCamera != null) {
-            return mCamera.getCameraInfo().getMaxZoomRatio().getValue();
+            return mCamera.getCameraInfo().getZoomState().getValue().getMaxZoomRatio();
         } else {
             return ZOOM_NOT_SUPPORTED;
         }
@@ -526,7 +480,6 @@ final class CameraXModule {
     }
 
     public void invalidateView() {
-        transformPreview();
         updateViewInfo();
     }
 
@@ -552,37 +505,10 @@ final class CameraXModule {
         mCurrentLifecycle = null;
     }
 
-    @UiThread
-    private void transformPreview() {
-        int previewWidth = getPreviewWidth();
-        int previewHeight = getPreviewHeight();
-        int displayOrientation = getDisplayRotationDegrees();
-
-        Matrix matrix = new Matrix();
-
-        // Apply rotation of the display
-        int rotation = -displayOrientation;
-
-        int px = (int) Math.round(previewWidth / 2d);
-        int py = (int) Math.round(previewHeight / 2d);
-
-        matrix.postRotate(rotation, px, py);
-
-        if (displayOrientation == 90 || displayOrientation == 270) {
-            // Swap width and height
-            float xScale = previewWidth / (float) previewHeight;
-            float yScale = previewHeight / (float) previewWidth;
-
-            matrix.postScale(xScale, yScale, px, py);
-        }
-
-        setTransform(matrix);
-    }
-
     // Update view related information used in use cases
     private void updateViewInfo() {
         if (mImageCapture != null) {
-            mImageCapture.setTargetAspectRatioCustom(new Rational(getWidth(), getHeight()));
+            mImageCapture.setCropAspectRatio(new Rational(getWidth(), getHeight()));
             mImageCapture.setTargetRotation(getDisplaySurfaceRotation());
         }
 
@@ -630,7 +556,18 @@ final class CameraXModule {
         if (mCamera == null) {
             return;
         }
-        mCamera.getCameraControl().enableTorch(torch);
+        ListenableFuture<Void> future = mCamera.getCameraControl().enableTorch(torch);
+        Futures.addCallback(future, new FutureCallback<Void>() {
+            @Override
+            public void onSuccess(@Nullable Void result) {
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+                // Throw the unexpected error.
+                throw new RuntimeException(t);
+            }
+        }, CameraXExecutors.directExecutor());
     }
 
     public boolean isTorchOn() {
@@ -642,6 +579,10 @@ final class CameraXModule {
 
     public Context getContext() {
         return getCameraView().getContext();
+    }
+
+    private CameraView getCameraView() {
+        return mWeakReferenceCameraView.get();
     }
 
     public int getWidth() {
@@ -660,18 +601,6 @@ final class CameraXModule {
         return getCameraView().getDisplaySurfaceRotation();
     }
 
-    public void setSurfaceTexture(SurfaceTexture st) {
-        getCameraView().setSurfaceTexture(st);
-    }
-
-    private int getPreviewWidth() {
-        return getCameraView().getPreviewWidth();
-    }
-
-    private int getPreviewHeight() {
-        return getCameraView().getPreviewHeight();
-    }
-
     private int getMeasuredWidth() {
         return getCameraView().getMeasuredWidth();
     }
@@ -680,38 +609,17 @@ final class CameraXModule {
         return getCameraView().getMeasuredHeight();
     }
 
-    void setTransform(final Matrix matrix) {
-        if (Looper.myLooper() != Looper.getMainLooper()) {
-            getCameraView().post(
-                    () -> setTransform(matrix));
-        } else {
-            getCameraView().setTransform(matrix);
-        }
-    }
-
-    /**
-     * Notify the view that the source dimensions have changed.
-     *
-     * <p>This will allow the view to layout the preview to display the correct aspect ratio.
-     *
-     * @param width  width of camera source buffers.
-     * @param height height of camera source buffers.
-     */
-    void onPreviewSourceDimensUpdated(int width, int height) {
-        getCameraView().onPreviewSourceDimensUpdated(width, height);
-    }
-
     @Nullable
     public Camera getCamera() {
         return mCamera;
     }
 
     @NonNull
-    public CaptureMode getCaptureMode() {
+    public CameraView.CaptureMode getCaptureMode() {
         return mCaptureMode;
     }
 
-    public void setCaptureMode(@NonNull CaptureMode captureMode) {
+    public void setCaptureMode(@NonNull CameraView.CaptureMode captureMode) {
         this.mCaptureMode = captureMode;
         rebindToLifecycle();
     }
@@ -735,5 +643,4 @@ final class CameraXModule {
     public boolean isPaused() {
         return false;
     }
-
 }

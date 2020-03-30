@@ -11,6 +11,8 @@ import com.luck.picture.lib.R;
 import com.luck.picture.lib.camera.CustomCameraView;
 import com.luck.picture.lib.engine.ImageEngine;
 import com.luck.picture.lib.entity.LocalMedia;
+import com.luck.picture.lib.engine.CacheResourcesEngine;
+import com.luck.picture.lib.listener.OnPictureSelectorInterfaceListener;
 import com.luck.picture.lib.listener.OnResultCallbackListener;
 import com.luck.picture.lib.listener.OnVideoSelectedPlayCallback;
 import com.luck.picture.lib.style.PictureCropParameterStyle;
@@ -100,8 +102,10 @@ public final class PictureSelectionConfig implements Parcelable {
     public boolean isWithVideoImage;
     public UCropOptions uCropOptions;
     public static ImageEngine imageEngine;
+    public static CacheResourcesEngine cacheResourcesEngine;
     public static OnResultCallbackListener listener;
     public static OnVideoSelectedPlayCallback customVideoPlayCallback;
+    public static OnPictureSelectorInterfaceListener onPictureSelectorInterfaceListener;
     public List<LocalMedia> selectionMedias;
     public String cameraFileName;
     public boolean isCheckOriginalImage;
@@ -131,11 +135,11 @@ public final class PictureSelectionConfig implements Parcelable {
     public int upResId;
     @Deprecated
     public int downResId;
-    @Deprecated
-    public String outputCameraPath;
+    public String outPutCameraPath;
 
     public String originalPath;
     public String cameraPath;
+    public int cameraMimeType;
     /**
      * 内测专用###########
      */
@@ -150,7 +154,7 @@ public final class PictureSelectionConfig implements Parcelable {
         selectionMode = PictureConfig.MULTIPLE;
         maxSelectNum = 9;
         minSelectNum = 0;
-        maxVideoSelectNum = 1;
+        maxVideoSelectNum = 0;
         minVideoSelectNum = 0;
         videoQuality = 1;
         language = -1;
@@ -217,7 +221,9 @@ public final class PictureSelectionConfig implements Parcelable {
         selectionMedias = new ArrayList<>();
         imageEngine = null;
         listener = null;
+        cacheResourcesEngine = null;
         customVideoPlayCallback = null;
+        onPictureSelectorInterfaceListener = null;
         uCropOptions = null;
         style = null;
         cropStyle = null;
@@ -232,12 +238,13 @@ public final class PictureSelectionConfig implements Parcelable {
         isChangeStatusBarFontColor = false;
         isOpenStyleNumComplete = false;
         isOpenStyleCheckNumMode = false;
-        outputCameraPath = "";
+        outPutCameraPath = "";
         sizeMultiplier = 0.5f;
         overrideWidth = 0;
         overrideHeight = 0;
         originalPath = "";
         cameraPath = "";
+        cameraMimeType = -1;
     }
 
     public static PictureSelectionConfig getInstance() {
@@ -350,9 +357,10 @@ public final class PictureSelectionConfig implements Parcelable {
         dest.writeInt(this.cropTitleColor);
         dest.writeInt(this.upResId);
         dest.writeInt(this.downResId);
-        dest.writeString(this.outputCameraPath);
+        dest.writeString(this.outPutCameraPath);
         dest.writeString(this.originalPath);
         dest.writeString(this.cameraPath);
+        dest.writeInt(this.cameraMimeType);
         dest.writeByte(this.isFallbackVersion ? (byte) 1 : (byte) 0);
         dest.writeByte(this.isFallbackVersion2 ? (byte) 1 : (byte) 0);
         dest.writeByte(this.isFallbackVersion3 ? (byte) 1 : (byte) 0);
@@ -382,6 +390,7 @@ public final class PictureSelectionConfig implements Parcelable {
         this.maxVideoSelectNum = in.readInt();
         this.minVideoSelectNum = in.readInt();
         this.videoQuality = in.readInt();
+        this.cameraMimeType = in.readInt();
         this.cropCompressQuality = in.readInt();
         this.videoMaxSecond = in.readInt();
         this.videoMinSecond = in.readInt();
@@ -444,7 +453,7 @@ public final class PictureSelectionConfig implements Parcelable {
         this.cropTitleColor = in.readInt();
         this.upResId = in.readInt();
         this.downResId = in.readInt();
-        this.outputCameraPath = in.readString();
+        this.outPutCameraPath = in.readString();
         this.originalPath = in.readString();
         this.cameraPath = in.readString();
         this.isFallbackVersion = in.readByte() != 0;
