@@ -1,6 +1,7 @@
 package com.luck.picture.lib;
 
 import android.content.Intent;
+import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -22,6 +23,7 @@ import com.luck.picture.lib.config.PictureConfig;
 import com.luck.picture.lib.config.PictureMimeType;
 import com.luck.picture.lib.entity.LocalMedia;
 import com.luck.picture.lib.observable.ImagesObservable;
+import com.luck.picture.lib.tools.MediaUtils;
 import com.luck.picture.lib.tools.PictureFileUtils;
 import com.luck.picture.lib.tools.ScreenUtils;
 import com.luck.picture.lib.tools.StringUtils;
@@ -579,6 +581,38 @@ public class PicturePreviewActivity extends PictureBaseActivity implements
                 if (!TextUtils.isEmpty(image.getRealPath()) && PictureMimeType.isContent(image.getPath())) {
                     image.setRealPath(PictureFileUtils.getPath(getContext(), Uri.parse(image.getPath())));
                 }
+
+                // 如果宽高为0，重新获取宽高
+                if (image.getWidth() == 0 || image.getHeight() == 0) {
+                    int width = 0, height = 0;
+                    image.setOrientation(-1);
+                    if (PictureMimeType.isContent(image.getPath())) {
+                        if (PictureMimeType.eqVideo(image.getMimeType())) {
+                            int[] size = MediaUtils.getVideoSizeForUri(getContext(), Uri.parse(image.getPath()));
+                            width = size[0];
+                            height = size[1];
+                        } else if (PictureMimeType.eqImage(image.getMimeType())) {
+                            int[] size = MediaUtils.getImageSizeForUri(getContext(), Uri.parse(image.getPath()));
+                            width = size[0];
+                            height = size[1];
+                        }
+                    } else {
+                        if (PictureMimeType.eqVideo(image.getMimeType())) {
+                            int[] size = MediaUtils.getVideoSizeForUrl(image.getPath());
+                            width = size[0];
+                            height = size[1];
+                        } else if (PictureMimeType.eqImage(image.getMimeType())) {
+                            int[] size = MediaUtils.getImageSizeForUrl(image.getPath());
+                            width = size[0];
+                            height = size[1];
+                        }
+                    }
+                    image.setWidth(width);
+                    image.setHeight(height);
+                }
+
+                // 如果有旋转信息图片宽高则是相反
+                MediaUtils.setOrientation(getContext(), image);
                 selectImages.add(image);
                 onSelectedChange(true, image);
                 image.setNum(selectImages.size());
@@ -769,6 +803,7 @@ public class PicturePreviewActivity extends PictureBaseActivity implements
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == RESULT_OK) {
             switch (requestCode) {
                 case UCrop.REQUEST_MULTI_CROP:

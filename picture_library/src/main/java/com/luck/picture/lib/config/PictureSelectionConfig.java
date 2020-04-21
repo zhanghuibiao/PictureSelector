@@ -9,9 +9,9 @@ import androidx.annotation.StyleRes;
 
 import com.luck.picture.lib.R;
 import com.luck.picture.lib.camera.CustomCameraView;
+import com.luck.picture.lib.engine.CacheResourcesEngine;
 import com.luck.picture.lib.engine.ImageEngine;
 import com.luck.picture.lib.entity.LocalMedia;
-import com.luck.picture.lib.engine.CacheResourcesEngine;
 import com.luck.picture.lib.listener.OnPictureSelectorInterfaceListener;
 import com.luck.picture.lib.listener.OnResultCallbackListener;
 import com.luck.picture.lib.listener.OnVideoSelectedPlayCallback;
@@ -219,11 +219,6 @@ public final class PictureSelectionConfig implements Parcelable {
         renameCompressFileName = "";
         renameCropFileName = "";
         selectionMedias = new ArrayList<>();
-        imageEngine = null;
-        listener = null;
-        cacheResourcesEngine = null;
-        customVideoPlayCallback = null;
-        onPictureSelectorInterfaceListener = null;
         uCropOptions = null;
         style = null;
         cropStyle = null;
@@ -262,6 +257,16 @@ public final class PictureSelectionConfig implements Parcelable {
     }
 
     public PictureSelectionConfig() {
+    }
+
+    /**
+     * 释放监听器
+     */
+    public static void destroy() {
+        PictureSelectionConfig.listener = null;
+        PictureSelectionConfig.customVideoPlayCallback = null;
+        PictureSelectionConfig.onPictureSelectorInterfaceListener = null;
+        PictureSelectionConfig.cacheResourcesEngine = null;
     }
 
 
@@ -390,7 +395,6 @@ public final class PictureSelectionConfig implements Parcelable {
         this.maxVideoSelectNum = in.readInt();
         this.minVideoSelectNum = in.readInt();
         this.videoQuality = in.readInt();
-        this.cameraMimeType = in.readInt();
         this.cropCompressQuality = in.readInt();
         this.videoMaxSecond = in.readInt();
         this.videoMinSecond = in.readInt();
@@ -456,12 +460,13 @@ public final class PictureSelectionConfig implements Parcelable {
         this.outPutCameraPath = in.readString();
         this.originalPath = in.readString();
         this.cameraPath = in.readString();
+        this.cameraMimeType = in.readInt();
         this.isFallbackVersion = in.readByte() != 0;
         this.isFallbackVersion2 = in.readByte() != 0;
         this.isFallbackVersion3 = in.readByte() != 0;
     }
 
-    public static final Creator<PictureSelectionConfig> CREATOR = new Creator<PictureSelectionConfig>() {
+    public static final Parcelable.Creator<PictureSelectionConfig> CREATOR = new Parcelable.Creator<PictureSelectionConfig>() {
         @Override
         public PictureSelectionConfig createFromParcel(Parcel source) {
             return new PictureSelectionConfig(source);

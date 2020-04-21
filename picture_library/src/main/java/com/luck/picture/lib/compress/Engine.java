@@ -58,7 +58,7 @@ class Engine {
             } else if (longSide > 4990 && longSide < 10240) {
                 return 4;
             } else {
-                return longSide / 1280 == 0 ? 1 : longSide / 1280;
+                return longSide / 1280;
             }
         } else if (scale <= 0.5625 && scale > 0.5) {
             return longSide / 1280 == 0 ? 1 : longSide / 1280;
@@ -81,7 +81,7 @@ class Engine {
         Bitmap tagBitmap = BitmapFactory.decodeStream(srcImg.open(), null, options);
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         if (srcImg.getMedia() != null && Checker.SINGLE.isJPG(srcImg.getMedia().getMimeType())) {
-            int orientation = Checker.SINGLE.getOrientation(srcImg.open());
+            int orientation = srcImg.getMedia().getOrientation();
             if (orientation > 0) {
                 tagBitmap = rotatingImage(tagBitmap, orientation);
             }

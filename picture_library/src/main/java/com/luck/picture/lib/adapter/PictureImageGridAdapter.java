@@ -30,6 +30,8 @@ import com.luck.picture.lib.tools.StringUtils;
 import com.luck.picture.lib.tools.ToastUtils;
 import com.luck.picture.lib.tools.VoiceUtils;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -118,7 +120,7 @@ public class PictureImageGridAdapter extends RecyclerView.Adapter<RecyclerView.V
     public RecyclerView.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
         if (viewType == PictureConfig.TYPE_CAMERA) {
             View view = LayoutInflater.from(context).inflate(R.layout.picture_item_camera, parent, false);
-            return new HeaderViewHolder(view);
+            return new CameraViewHolder(view);
         } else {
             View view = LayoutInflater.from(context).inflate(R.layout.picture_image_grid_item, parent, false);
             return new ViewHolder(view);
@@ -126,9 +128,9 @@ public class PictureImageGridAdapter extends RecyclerView.Adapter<RecyclerView.V
     }
 
     @Override
-    public void onBindViewHolder(final RecyclerView.ViewHolder holder, final int position) {
+    public void onBindViewHolder(@NotNull final RecyclerView.ViewHolder holder, final int position) {
         if (getItemViewType(position) == PictureConfig.TYPE_CAMERA) {
-            HeaderViewHolder headerHolder = (HeaderViewHolder) holder;
+            CameraViewHolder headerHolder = (CameraViewHolder) holder;
             headerHolder.headerView.setOnClickListener(v -> {
                 if (imageSelectChangedListener != null) {
                     imageSelectChangedListener.onTakePhoto();
@@ -152,9 +154,13 @@ public class PictureImageGridAdapter extends RecyclerView.Adapter<RecyclerView.V
             contentHolder.tvIsGif.setVisibility(gif ? View.VISIBLE : View.GONE);
             boolean eqImage = PictureMimeType.eqImage(image.getMimeType());
             if (eqImage) {
-                boolean eqLongImg = MediaUtils.isLongImg(image);
-                contentHolder.tvLongChart.setVisibility(eqLongImg ? View.VISIBLE : View.GONE);
+                if (image.loadLongImageStatus == PictureConfig.NORMAL) {
+                    image.isLongImage = MediaUtils.isLongImg(image);
+                    image.loadLongImageStatus = PictureConfig.LOADED;
+                }
+                contentHolder.tvLongChart.setVisibility(image.isLongImage ? View.VISIBLE : View.GONE);
             } else {
+                image.loadLongImageStatus = PictureConfig.NORMAL;
                 contentHolder.tvLongChart.setVisibility(View.GONE);
             }
             boolean eqVideo = PictureMimeType.eqVideo(mimeType);
@@ -187,6 +193,8 @@ public class PictureImageGridAdapter extends RecyclerView.Adapter<RecyclerView.V
                     if (SdkVersionUtils.checkedAndroid_Q()) {
                         image.setRealPath(newPath);
                     }
+                    // 如果有旋转信息图片宽高则是相反
+                    MediaUtils.setOrientation(context, image);
                     changeCheckboxState(contentHolder, image);
                 });
             }
@@ -205,6 +213,8 @@ public class PictureImageGridAdapter extends RecyclerView.Adapter<RecyclerView.V
                 if (SdkVersionUtils.checkedAndroid_Q()) {
                     image.setRealPath(newPath);
                 }
+                // 如果有旋转信息图片宽高则是相反
+                MediaUtils.setOrientation(context, image);
                 boolean eqResult =
                         PictureMimeType.eqImage(mimeType) && config.enablePreview
                                 || PictureMimeType.eqVideo(mimeType) && (config.enPreviewVideo
@@ -240,11 +250,11 @@ public class PictureImageGridAdapter extends RecyclerView.Adapter<RecyclerView.V
         return showCamera ? images.size() + 1 : images.size();
     }
 
-    public class HeaderViewHolder extends RecyclerView.ViewHolder {
+    public class CameraViewHolder extends RecyclerView.ViewHolder {
         View headerView;
         TextView tvCamera;
 
-        public HeaderViewHolder(View itemView) {
+        public CameraViewHolder(View itemView) {
             super(itemView);
             headerView = itemView;
             tvCamera = itemView.findViewById(R.id.tvCamera);
@@ -322,13 +332,13 @@ public class PictureImageGridAdapter extends RecyclerView.Adapter<RecyclerView.V
     @SuppressLint("StringFormatMatches")
     private void changeCheckboxState(ViewHolder contentHolder, LocalMedia image) {
         boolean isChecked = contentHolder.tvCheck.isSelected();
-        int size = selectImages.size();
-        String mimeType = size > 0 ? selectImages.get(0).getMimeType() : "";
+        int count = selectImages.size();
+        String mimeType = count > 0 ? selectImages.get(0).getMimeType() : "";
         if (config.isWithVideoImage) {
             // 混选模式
             int videoSize = 0;
             int imageSize = 0;
-            for (int i = 0; i < size; i++) {
+            for (int i = 0; i < count; i++) {
                 LocalMedia media = selectImages.get(i);
                 if (PictureMimeType.eqVideo(media.getMimeType())) {
                     videoSize++;
@@ -383,7 +393,7 @@ public class PictureImageGridAdapter extends RecyclerView.Adapter<RecyclerView.V
                 }
             }
             if (PictureMimeType.eqVideo(mimeType) && config.maxVideoSelectNum > 0) {
-                if (size >= config.maxVideoSelectNum && !isChecked) {
+                if (count >= config.maxVideoSelectNum && !isChecked) {
                     // 如果先选择的是视频
                     ToastUtils.s(context, StringUtils.getMsg(context, mimeType, config.maxVideoSelectNum));
                     return;
@@ -402,7 +412,7 @@ public class PictureImageGridAdapter extends RecyclerView.Adapter<RecyclerView.V
                     return;
                 }
             } else {
-                if (size >= config.maxSelectNum && !isChecked) {
+                if (count >= config.maxSelectNum && !isChecked) {
                     ToastUtils.s(context, StringUtils.getMsg(context, mimeType, config.maxSelectNum));
                     return;
                 }
@@ -425,7 +435,7 @@ public class PictureImageGridAdapter extends RecyclerView.Adapter<RecyclerView.V
         }
 
         if (isChecked) {
-            for (int i = 0; i < size; i++) {
+            for (int i = 0; i < count; i++) {
                 LocalMedia media = selectImages.get(i);
                 if (media == null || TextUtils.isEmpty(media.getPath())) {
                     continue;
@@ -443,6 +453,38 @@ public class PictureImageGridAdapter extends RecyclerView.Adapter<RecyclerView.V
             if (config.selectionMode == PictureConfig.SINGLE) {
                 singleRadioMediaImage();
             }
+
+            // 如果宽高为0，重新获取宽高
+            if (image.getWidth() == 0 || image.getHeight() == 0) {
+                int width = 0, height = 0;
+                image.setOrientation(-1);
+                if (PictureMimeType.isContent(image.getPath())) {
+                    if (PictureMimeType.eqVideo(image.getMimeType())) {
+                        int[] size = MediaUtils.getVideoSizeForUri(context, Uri.parse(image.getPath()));
+                        width = size[0];
+                        height = size[1];
+                    } else if (PictureMimeType.eqImage(image.getMimeType())) {
+                        int[] size = MediaUtils.getImageSizeForUri(context, Uri.parse(image.getPath()));
+                        width = size[0];
+                        height = size[1];
+                    }
+                } else {
+                    if (PictureMimeType.eqVideo(image.getMimeType())) {
+                        int[] size = MediaUtils.getVideoSizeForUrl(image.getPath());
+                        width = size[0];
+                        height = size[1];
+                    } else if (PictureMimeType.eqImage(image.getMimeType())) {
+                        int[] size = MediaUtils.getImageSizeForUrl(image.getPath());
+                        width = size[0];
+                        height = size[1];
+                    }
+                }
+                image.setWidth(width);
+                image.setHeight(height);
+            }
+
+            // 如果有旋转信息图片宽高则是相反
+            MediaUtils.setOrientation(context, image);
             selectImages.add(image);
             image.setNum(selectImages.size());
             VoiceUtils.getInstance().play();

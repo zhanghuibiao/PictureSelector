@@ -496,11 +496,6 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
             ToastUtils.s(this, getString(R.string.picture_not_crop_data));
             return;
         }
-        if (list.size() == 1) {
-            // 单张图调用单张裁剪
-            startCrop(list.get(0).getPath(), list.get(0).getMimeType());
-            return;
-        }
         // 载入裁剪样式参数配制
         UCrop.Options options = basicOptions(list);
         int size = list.size();
@@ -826,10 +821,17 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
                     config.windowAnimationStyle.activityExitAnimation : R.anim.picture_anim_exit);
         }
         // 关闭主界面后才释放回调监听
-        if (getContext() instanceof PictureSelectorActivity) {
-            releaseResultListener();
-            if (config.openClickSound) {
-                VoiceUtils.getInstance().releaseSoundPool();
+        if (config.camera) {
+            if (getContext() instanceof PictureSelectorCameraEmptyActivity
+                    || getContext() instanceof PictureCustomCameraActivity) {
+                releaseResultListener();
+            }
+        } else {
+            if (getContext() instanceof PictureSelectorActivity) {
+                releaseResultListener();
+                if (config.openClickSound) {
+                    VoiceUtils.getInstance().releaseSoundPool();
+                }
             }
         }
     }
@@ -986,10 +988,7 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
      */
     private void releaseResultListener() {
         if (config != null) {
-            PictureSelectionConfig.listener = null;
-            PictureSelectionConfig.customVideoPlayCallback = null;
-            PictureSelectionConfig.onPictureSelectorInterfaceListener = null;
-            PictureSelectionConfig.cacheResourcesEngine = null;
+            PictureSelectionConfig.destroy();
             PictureThreadUtils.cancel(PictureThreadUtils.getCachedPool());
             PictureThreadUtils.cancel(PictureThreadUtils.getSinglePool());
         }
