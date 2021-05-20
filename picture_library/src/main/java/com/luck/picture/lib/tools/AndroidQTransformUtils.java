@@ -2,9 +2,6 @@ package com.luck.picture.lib.tools;
 
 import android.content.Context;
 import android.net.Uri;
-import android.text.TextUtils;
-
-import com.luck.picture.lib.config.PictureSelectionConfig;
 
 import java.io.File;
 import java.io.OutputStream;
@@ -26,17 +23,20 @@ public class AndroidQTransformUtils {
      * #耗时操作需要放在子线程中操作
      *
      * @param ctx
-     * @param uri
+     * @param id
+     * @param url
+     * @param width
+     * @param height
      * @param mineType
      * @param customFileName
      * @return
      */
-    public static String copyPathToAndroidQ(Context ctx, String url, int width, int height, String mineType, String customFileName) {
+    public static String copyPathToAndroidQ(Context ctx, long id, String url, int width, int height, String mineType, String customFileName) {
         // 走普通的文件复制流程，拷贝至应用沙盒内来
         BufferedSource inBuffer = null;
         try {
             Uri uri = Uri.parse(url);
-            String encryptionValue = StringUtils.getEncryptionValue(url, width, height);
+            String encryptionValue = StringUtils.getEncryptionValue(id, width, height);
             String newPath = PictureFileUtils.createFilePath(ctx, encryptionValue, mineType, customFileName);
             File outFile = new File(newPath);
             if (outFile.exists()) {
@@ -54,7 +54,7 @@ public class AndroidQTransformUtils {
                 PictureFileUtils.close(inBuffer);
             }
         }
-        return null;
+        return "";
     }
 
     /**

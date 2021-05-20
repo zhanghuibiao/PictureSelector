@@ -3,7 +3,7 @@
 
 [中文版🇨🇳](README_CN.md)
 
-[Download APK](https://github.com/LuckSiege/PictureSelector/raw/master/app/demo/app_2020_11_22_2210_2.6.0.apk)<br>
+[Download APK](https://github.com/LuckSiege/PictureSelector/raw/master/app/demo/app_2021-05-19_090243_v2.7.0-rc05.apk)<br>
 
 [![](https://jitpack.io/v/LuckSiege/PictureSelector.svg)](https://jitpack.io/#LuckSiege/PictureSelector)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg)](https://github.com/LuckSiege)
@@ -12,12 +12,11 @@
 [![Star](https://img.shields.io/github/stars/LuckSiege/PictureSelector.svg)](https://github.com/LuckSiege/PictureSelector)
 
 ## Directory
--[Latest Version v2.6.0](#Version)<br>
--[Update Log](https://github.com/LuckSiege/PictureSelector/releases/tag/v2.6.0)<br>
+-[Or use Gradle](#Version)<br>
+-[Update Log](https://github.com/LuckSiege/PictureSelector/releases/tag/v2.7.0-rc05)<br>
 -[Style Configuration-Xml](https://github.com/LuckSiege/PictureSelector/wiki/%E8%87%AA%E5%AE%9A%E4%B9%89%E4%B8%BB%E9%A2%98-Xml%E6%96%B9%E5%BC%8F)<br>
 -[Style Configuration-Code](https://github.com/LuckSiege/PictureSelector/wiki/%E8%87%AA%E5%AE%9A%E4%B9%89%E5%8A%A8%E6%80%81%E4%B8%BB%E9%A2%98(%E5%8C%85%E5%90%AB%E8%A3%81%E5%89%AA%E3%80%81%E7%9B%B8%E5%86%8C%E5%90%AF%E5%8A%A8%E5%8A%A8%E7%94%BB)-Code%E6%96%B9%E5%BC%8F)<br>
 -[Demo Effect](#Effect)<br>
--[Method Of Use](https://github.com/LuckSiege/PictureSelector/wiki/%E9%9B%86%E6%88%90%E6%96%B9%E5%BC%8F)<br>
 -[Api Explain](https://github.com/LuckSiege/PictureSelector/wiki/PictureSelector-Api)<br>
 -[Open Photo Album](#Photo)<br>
 -[Open Camera](#Camera)<br>
@@ -28,19 +27,26 @@
 -[License](#License)<br>
 
 ## Version
-step 1
+
 ```sh
-implementation 'com.github.LuckSiege.PictureSelector:picture_library:v2.6.0'
+repositories {
+  google()
+  mavenCentral()
+}
+
+dependencies {
+  implementation 'io.github.lucksiege:pictureselector:v2.7.0-rc05'
+}
 ```
 
-step 2
+Or Maven:
+
 ```sh
-allprojects {
-   repositories {
-      jcenter()
-      maven { url 'https://jitpack.io' }
-   }
-}
+<dependency>
+  <groupId>io.github.lucksiege</groupId>
+  <artifactId>pictureselector</artifactId>
+  <version>v2.7.0-rc05</version>
+</dependency>
 ```
 
 ## Photo
@@ -93,7 +99,7 @@ onActivityResult
 ```sh
  PictureSelector.create(this)
    .openCamera(PictureMimeType.ofImage())
-   .loadImageEngine(GlideEngine.createGlideEngine()) // Please refer to the Demo GlideEngine.java
+   .imageEngine(GlideEngine.createGlideEngine()) // Please refer to the Demo GlideEngine.java
    .forResult(PictureConfig.REQUEST_CAMERA);  
    
     @Override
@@ -115,7 +121,7 @@ Callback
 ```sh
 PictureSelector.create(this)
    .openCamera(PictureMimeType.ofImage())
-   .loadImageEngine(GlideEngine.createGlideEngine())
+   .imageEngine(GlideEngine.createGlideEngine())
    .forResult(new OnResultCallbackListener<LocalMedia>() {
        @Override
        public void onResult(List<LocalMedia> result) {

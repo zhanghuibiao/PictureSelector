@@ -31,21 +31,18 @@ import com.luck.picture.lib.entity.LocalMediaFolder;
 import com.luck.picture.lib.immersive.ImmersiveManage;
 import com.luck.picture.lib.immersive.NavBarUtils;
 import com.luck.picture.lib.language.PictureLanguageUtils;
+import com.luck.picture.lib.listener.OnCallbackListener;
 import com.luck.picture.lib.model.LocalMediaPageLoader;
 import com.luck.picture.lib.permissions.PermissionChecker;
 import com.luck.picture.lib.thread.PictureThreadUtils;
 import com.luck.picture.lib.tools.AndroidQTransformUtils;
 import com.luck.picture.lib.tools.AttrsUtils;
-import com.luck.picture.lib.tools.DateUtils;
-import com.luck.picture.lib.tools.DoubleUtils;
 import com.luck.picture.lib.tools.MediaUtils;
 import com.luck.picture.lib.tools.PictureFileUtils;
 import com.luck.picture.lib.tools.SdkVersionUtils;
 import com.luck.picture.lib.tools.StringUtils;
 import com.luck.picture.lib.tools.ToastUtils;
 import com.luck.picture.lib.tools.VoiceUtils;
-import com.yalantis.ucrop.UCrop;
-import com.yalantis.ucrop.model.CutInfo;
 
 import org.jetbrains.annotations.NotNull;
 
@@ -65,8 +62,8 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
     protected boolean openWhiteStatusBar, numComplete;
     protected int colorPrimary, colorPrimaryDark;
     protected PictureLoadingDialog mLoadingDialog;
-    protected List<LocalMedia> selectionMedias;
-    protected Handler mHandler;
+    protected List<LocalMedia> selectionMedias = new ArrayList<>();
+    protected Handler mHandler = new Handler(Looper.getMainLooper());
     protected View container;
     /**
      * if there more
@@ -148,16 +145,13 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         config = PictureSelectionConfig.getInstance();
         PictureLanguageUtils.setAppLanguage(getContext(), config.language);
-        if (!config.camera) {
-            setTheme(config.themeStyleId == 0 ? R.style.picture_default_style : config.themeStyleId);
-        }
+        setTheme(config.themeStyleId == 0 ? R.style.picture_default_style : config.themeStyleId);
         super.onCreate(savedInstanceState);
         newCreateEngine();
         newCreateResultCallbackListener();
         if (isRequestedOrientation()) {
             setNewRequestedOrientation();
         }
-        mHandler = new Handler(Looper.getMainLooper());
         initConfig();
         if (isImmersive()) {
             immersive();
@@ -236,7 +230,10 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
      * init Config
      */
     private void initConfig() {
-        selectionMedias = config.selectionMedias == null ? new ArrayList<>() : config.selectionMedias;
+        if (config.selectionMedias != null) {
+            selectionMedias.clear();
+            selectionMedias.addAll(config.selectionMedias);
+        }
         if (PictureSelectionConfig.uiStyle != null) {
             openWhiteStatusBar = PictureSelectionConfig.uiStyle.picture_statusBarChangeTextColor;
             if (PictureSelectionConfig.uiStyle.picture_top_titleBarBackgroundColor != 0) {
@@ -340,9 +337,18 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
     /**
      * compressImage
      */
-    protected void compressImage(final List<LocalMedia> result) {
-        showPleaseDialog();
-        compressToLuban(result);
+    protected void compressImage(List<LocalMedia> result) {
+        if (PictureSelectionConfig.compressEngine != null) {
+            PictureSelectionConfig.compressEngine.onCompress(getContext(),result, new OnCallbackListener<List<LocalMedia>>() {
+                @Override
+                public void onCall(List<LocalMedia> result) {
+                    onResult(result);
+                }
+            });
+        } else {
+            showPleaseDialog();
+            compressToLuban(result);
+        }
     }
 
     /**
@@ -352,7 +358,7 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
      */
     private void compressToLuban(List<LocalMedia> result) {
         if (config.synOrAsy) {
-            PictureThreadUtils.executeByIo(new PictureThreadUtils.SimpleTask<List<File>>() {
+            PictureThreadUtils.executeBySingle(new PictureThreadUtils.SimpleTask<List<File>>() {
 
                 @Override
                 public List<File> doInBackground() throws Exception {
@@ -361,6 +367,7 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
                             .isCamera(config.camera)
                             .setTargetDir(config.compressSavePath)
                             .setCompressQuality(config.compressQuality)
+                            .isAutoRotating(config.isAutoRotating)
                             .setFocusAlpha(config.focusAlpha)
                             .setNewCompressFileName(config.renameCompressFileName)
                             .ignoreBy(config.minimumCompressSize).get();
@@ -382,6 +389,7 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
                     .isCamera(config.camera)
                     .setCompressQuality(config.compressQuality)
                     .setTargetDir(config.compressSavePath)
+                    .isAutoRotating(config.isAutoRotating)
                     .setFocusAlpha(config.focusAlpha)
                     .setNewCompressFileName(config.renameCompressFileName)
                     .setCompressListener(new OnCompressListener() {
@@ -416,7 +424,7 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
         boolean isAndroidQ = SdkVersionUtils.checkedAndroid_Q();
         int size = images.size();
         if (files.size() == size) {
-            for (int i = 0, j = size; i < j; i++) {
+            for (int i = 0; i < size; i++) {
                 File file = files.get(i);
                 if (file == null) {
                     continue;
@@ -443,8 +451,7 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
      * @param result
      */
     protected void handlerResult(List<LocalMedia> result) {
-        if (config.isCompress
-                && !config.isCheckOriginalImage) {
+        if (config.isCompress && !config.isCheckOriginalImage) {
             compressImage(result);
         } else {
             onResult(result);
@@ -500,15 +507,11 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
      * @param images
      */
     protected void onResult(List<LocalMedia> images) {
-        boolean isAndroidQ = SdkVersionUtils.checkedAndroid_Q();
-        if (isAndroidQ && config.isAndroidQTransform) {
-            showPleaseDialog();
+        if (SdkVersionUtils.checkedAndroid_Q() && config.isAndroidQTransform) {
             onResultToAndroidAsy(images);
         } else {
             dismissDialog();
-            if (config.camera
-                    && config.selectionMode == PictureConfig.MULTIPLE
-                    && selectionMedias != null) {
+            if (config.camera && config.selectionMode == PictureConfig.MULTIPLE) {
                 images.addAll(images.size() > 0 ? images.size() - 1 : 0, selectionMedias);
             }
             if (config.isCheckOriginalImage) {
@@ -535,7 +538,65 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
      * @param images
      */
     private void onResultToAndroidAsy(List<LocalMedia> images) {
-        PictureThreadUtils.executeByIo(new PictureThreadUtils.SimpleTask<List<LocalMedia>>() {
+        int size = images.size();
+        boolean isNextCopyAndroidQToPath = false;
+        for (int i = 0; i < size; i++) {
+            LocalMedia media = images.get(i);
+            if (media == null || TextUtils.isEmpty(media.getPath())) {
+                continue;
+            }
+            if (!media.isCut() && !media.isCompressed() && TextUtils.isEmpty(media.getAndroidQToPath())) {
+                isNextCopyAndroidQToPath = true;
+                break;
+            }
+        }
+        if (isNextCopyAndroidQToPath) {
+            startThreadCopySandbox(images);
+        } else {
+            normalResult(images);
+        }
+    }
+
+    /**
+     * normal return result
+     *
+     * @param images
+     */
+    private void normalResult(List<LocalMedia> images) {
+        int size = images.size();
+        for (int i = 0; i < size; i++) {
+            LocalMedia media = images.get(i);
+            if (media == null || TextUtils.isEmpty(media.getPath())) {
+                continue;
+            }
+            if (media.isCut() && media.isCompressed()) {
+                media.setAndroidQToPath(media.getCompressPath());
+            }
+            if (config.isCheckOriginalImage) {
+                media.setOriginal(true);
+                media.setOriginalPath(media.getAndroidQToPath());
+            }
+        }
+        if (config.camera && config.selectionMode == PictureConfig.MULTIPLE) {
+            images.addAll(images.size() > 0 ? images.size() - 1 : 0, selectionMedias);
+        }
+        if (PictureSelectionConfig.listener != null) {
+            PictureSelectionConfig.listener.onResult(images);
+        } else {
+            Intent intent = PictureSelector.putIntentResult(images);
+            setResult(RESULT_OK, intent);
+        }
+        exit();
+    }
+
+    /**
+     * start thread copy file to Sandbox
+     *
+     * @param images
+     */
+    private void startThreadCopySandbox(List<LocalMedia> images) {
+        showPleaseDialog();
+        PictureThreadUtils.executeBySingle(new PictureThreadUtils.SimpleTask<List<LocalMedia>>() {
             @Override
             public List<LocalMedia> doInBackground() {
                 int size = images.size();
@@ -549,7 +610,7 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
                             && TextUtils.isEmpty(media.getAndroidQToPath());
                     if (isCopyAndroidQToPath && PictureMimeType.isContent(media.getPath())) {
                         if (!PictureMimeType.isHasHttp(media.getPath())) {
-                            String AndroidQToPath = AndroidQTransformUtils.copyPathToAndroidQ(getContext(),
+                            String AndroidQToPath = AndroidQTransformUtils.copyPathToAndroidQ(getContext(), media.getId(),
                                     media.getPath(), media.getWidth(), media.getHeight(), media.getMimeType(), config.cameraFileName);
                             media.setAndroidQToPath(AndroidQToPath);
                         }
@@ -568,9 +629,7 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
             public void onSuccess(List<LocalMedia> images) {
                 dismissDialog();
                 if (images != null) {
-                    if (config.camera
-                            && config.selectionMode == PictureConfig.MULTIPLE
-                            && selectionMedias != null) {
+                    if (config.camera && config.selectionMode == PictureConfig.MULTIPLE) {
                         images.addAll(images.size() > 0 ? images.size() - 1 : 0, selectionMedias);
                     }
                     if (PictureSelectionConfig.listener != null) {
@@ -744,6 +803,8 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
             if (cameraIntent.resolveActivity(getPackageManager()) != null) {
                 config.cameraMimeType = PictureMimeType.ofAudio();
                 startActivityForResult(cameraIntent, PictureConfig.REQUEST_CAMERA);
+            } else {
+                ToastUtils.s(getContext(), "System recording is not supported");
             }
         } else {
             PermissionChecker.requestPermissions(this,
@@ -758,7 +819,7 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
         if (config != null) {
             PictureSelectionConfig.destroy();
             LocalMediaPageLoader.setInstanceNull();
-            PictureThreadUtils.cancel(PictureThreadUtils.getIoPool());
+            PictureThreadUtils.cancel(PictureThreadUtils.getSinglePool());
         }
     }
 
@@ -781,9 +842,10 @@ public abstract class PictureBaseActivity extends AppCompatActivity {
      * showPermissionsDialog
      *
      * @param isCamera
+     * @param permissions
      * @param errorMsg
      */
-    protected void showPermissionsDialog(boolean isCamera, String errorMsg) {
+    protected void showPermissionsDialog(boolean isCamera, String[] permissions, String errorMsg) {
 
     }
 

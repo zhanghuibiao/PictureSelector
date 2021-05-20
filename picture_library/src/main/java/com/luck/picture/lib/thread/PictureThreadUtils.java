@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -21,6 +22,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -30,7 +32,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * @describe：ThreadPool
  */
 public final class PictureThreadUtils {
-
 
     private static final Handler HANDLER = new Handler(Looper.getMainLooper());
 
@@ -57,6 +58,29 @@ public final class PictureThreadUtils {
         }
     }
 
+    /**
+     * Return a thread pool that uses a single worker thread operating
+     * off an unbounded queue, and uses the provided ThreadFactory to
+     * create a new thread when needed.
+     *
+     * @return a single thread pool
+     */
+    public static ExecutorService getSinglePool() {
+        return getPoolByTypeAndPriority(TYPE_SINGLE);
+    }
+
+    /**
+     * Return a thread pool that uses a single worker thread operating
+     * off an unbounded queue, and uses the provided ThreadFactory to
+     * create a new thread when needed.
+     *
+     * @param priority The priority of thread in the poll.
+     * @return a single thread pool
+     */
+    public static ExecutorService getSinglePool(@IntRange(from = 1, to = 10) final int priority) {
+        return getPoolByTypeAndPriority(TYPE_SINGLE, priority);
+    }
+
 
     /**
      * Return a thread pool that creates (2 * CPU_COUNT + 1) threads
@@ -69,14 +93,25 @@ public final class PictureThreadUtils {
     }
 
     /**
-     * Return a thread pool that creates (2 * CPU_COUNT + 1) threads
-     * operating off a queue which size is 128.
+     * Executes the given task in a single thread pool.
      *
-     * @param priority The priority of thread in the poll.
-     * @return a IO thread pool
+     * @param task The task to execute.
+     * @param <T>  The type of the task's result.
      */
-    public static ExecutorService getIoPool(@IntRange(from = 1, to = 10) final int priority) {
-        return getPoolByTypeAndPriority(TYPE_IO, priority);
+    public static <T> void executeBySingle(final Task<T> task) {
+        execute(getPoolByTypeAndPriority(TYPE_SINGLE), task);
+    }
+
+    /**
+     * Executes the given task in a single thread pool.
+     *
+     * @param task     The task to execute.
+     * @param priority The priority of thread in the poll.
+     * @param <T>      The type of the task's result.
+     */
+    public static <T> void executeBySingle(final Task<T> task,
+                                           @IntRange(from = 1, to = 10) final int priority) {
+        execute(getPoolByTypeAndPriority(TYPE_SINGLE, priority), task);
     }
 
 
@@ -88,6 +123,18 @@ public final class PictureThreadUtils {
      */
     public static <T> void executeByIo(final Task<T> task) {
         execute(getPoolByTypeAndPriority(TYPE_IO), task);
+    }
+
+    /**
+     * Executes the given task in an IO thread pool.
+     *
+     * @param task     The task to execute.
+     * @param priority The priority of thread in the poll.
+     * @param <T>      The type of the task's result.
+     */
+    public static <T> void executeByIo(final Task<T> task,
+                                       @IntRange(from = 1, to = 10) final int priority) {
+        execute(getPoolByTypeAndPriority(TYPE_IO, priority), task);
     }
 
     /**
@@ -143,18 +190,11 @@ public final class PictureThreadUtils {
         }
     }
 
-    /**
-     * Set the deliver.
-     *
-     * @param deliver The deliver.
-     */
-    public static void setDeliver(final Executor deliver) {
-        sDeliver = deliver;
-    }
 
     private static <T> void execute(final ExecutorService pool, final Task<T> task) {
         execute(pool, task, 0, 0, null);
     }
+
 
     private static <T> void execute(final ExecutorService pool, final Task<T> task,
                                     long delay, final long period, final TimeUnit unit) {
@@ -252,7 +292,7 @@ public final class PictureThreadUtils {
 
         private final AtomicInteger mSubmittedCount = new AtomicInteger();
 
-        private LinkedBlockingQueue4Util mWorkQueue;
+        private final LinkedBlockingQueue4Util mWorkQueue;
 
         ThreadPoolExecutor4Util(int corePoolSize, int maximumPoolSize,
                                 long keepAliveTime, TimeUnit unit,
@@ -435,6 +475,7 @@ public final class PictureThreadUtils {
                             if (!isDone() && mTimeoutListener != null) {
                                 timeout();
                                 mTimeoutListener.onTimeout();
+                                onDone();
                             }
                         }
                     }, mTimeoutMillis);
@@ -506,7 +547,6 @@ public final class PictureThreadUtils {
             if (runner != null) {
                 runner.interrupt();
             }
-            onDone();
         }
 
 
@@ -555,6 +595,43 @@ public final class PictureThreadUtils {
 
         public interface OnTimeoutListener {
             void onTimeout();
+        }
+    }
+
+    public static class SyncValue<T> {
+
+        private CountDownLatch mLatch = new CountDownLatch(1);
+        private AtomicBoolean mFlag = new AtomicBoolean();
+        private T mValue;
+
+        public void setValue(T value) {
+            if (mFlag.compareAndSet(false, true)) {
+                mValue = value;
+                mLatch.countDown();
+            }
+        }
+
+        public T getValue() {
+            if (!mFlag.get()) {
+                try {
+                    mLatch.await();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            return mValue;
+        }
+
+        public T getValue(long timeout, TimeUnit unit, T defaultValue) {
+            if (!mFlag.get()) {
+                try {
+                    mLatch.await(timeout, unit);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                    return defaultValue;
+                }
+            }
+            return mValue;
         }
     }
 

@@ -39,7 +39,7 @@ public class StringUtils {
      */
     public static int stringToInt(String str) {
         Pattern pattern = Pattern.compile("^[-\\+]?[\\d]+$");
-        return pattern.matcher(str).matches() ? Integer.valueOf(str) : 0;
+        return pattern.matcher(str).matches() ? ValueOf.toInt(str) : 0;
     }
 
     /**
@@ -87,25 +87,12 @@ public class StringUtils {
     /**
      * getEncryptionValue
      *
-     * @param url
+     * @param id
      * @param width
      * @param height
      * @return
      */
-    public static String getEncryptionValue(String url, int width, int height) {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append(url).append("_").append(width).append("x").append(height);
-        return ValueOf.toString(Math.abs(hash(stringBuilder.hashCode())));
-    }
-
-    /**
-     * hash
-     *
-     * @param key
-     * @return
-     */
-    public static final int hash(Object key) {
-        int h;
-        return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+    public static String getEncryptionValue(long id, int width, int height) {
+        return id + "_" + width + height;
     }
 }

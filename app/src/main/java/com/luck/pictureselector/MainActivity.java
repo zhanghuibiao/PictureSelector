@@ -15,6 +15,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.animation.AccelerateInterpolator;
+import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
@@ -39,10 +40,13 @@ import com.luck.picture.lib.config.PictureConfig;
 import com.luck.picture.lib.config.PictureMimeType;
 import com.luck.picture.lib.config.PictureSelectionConfig;
 import com.luck.picture.lib.decoration.GridSpacingItemDecoration;
+import com.luck.picture.lib.dialog.PictureCustomDialog;
 import com.luck.picture.lib.entity.LocalMedia;
 import com.luck.picture.lib.language.LanguageConfig;
 import com.luck.picture.lib.listener.OnCustomCameraInterfaceListener;
 import com.luck.picture.lib.listener.OnCustomImagePreviewCallback;
+import com.luck.picture.lib.listener.OnPermissionDialogOptionCallback;
+import com.luck.picture.lib.listener.OnPermissionsObtainCallback;
 import com.luck.picture.lib.listener.OnResultCallbackListener;
 import com.luck.picture.lib.listener.OnVideoSelectedPlayCallback;
 import com.luck.picture.lib.permissions.PermissionChecker;
@@ -57,6 +61,8 @@ import com.luck.picture.lib.tools.ToastUtils;
 import com.luck.picture.lib.tools.ValueOf;
 import com.luck.pictureselector.adapter.GridImageAdapter;
 import com.luck.pictureselector.listener.DragListener;
+
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
@@ -422,7 +428,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    private GridImageAdapter.onAddPicClickListener onAddPicClickListener = new GridImageAdapter.onAddPicClickListener() {
+    private final GridImageAdapter.onAddPicClickListener onAddPicClickListener = new GridImageAdapter.onAddPicClickListener() {
         @Override
         public void onAddPicClick() {
             boolean mode = cb_mode.isChecked();
@@ -442,26 +448,35 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         .isPageStrategy(cbPage.isChecked())// 是否开启分页策略 & 每页多少条；默认开启
                         .setRecyclerAnimationMode(animationMode)// 列表动画效果
                         .isWithVideoImage(true)// 图片和视频是否可以同选,只在ofAll模式下有效
+                        //.isSyncCover(true)// 是否强制从MediaStore里同步相册封面，如果相册封面没显示异常则没必要设置
+                        //.isCameraAroundState(false) // 是否开启前置摄像头，默认false，如果使用系统拍照 可能部分机型会有兼容性问题
+                        //.isCameraRotateImage(false) // 拍照图片旋转是否自动纠正
+                        //.isAutoRotating(false)// 压缩时自动纠正有旋转的图片
                         .isMaxSelectEnabledMask(cbEnabledMask.isChecked())// 选择数到了最大阀值列表是否启用蒙层效果
                         //.isAutomaticTitleRecyclerTop(false)// 连续点击标题栏RecyclerView是否自动回到顶部,默认true
                         //.loadCacheResourcesCallback(GlideCacheEngine.createCacheEngine())// 获取图片资源缓存，主要是解决华为10部分机型在拷贝文件过多时会出现卡的问题，这里可以判断只在会出现一直转圈问题机型上使用
                         //.setOutputCameraPath(createCustomCameraOutPath())// 自定义相机输出目录
                         //.setButtonFeatures(CustomCameraView.BUTTON_STATE_BOTH)// 设置自定义相机按钮状态
+                        .setCaptureLoadingColor(ContextCompat.getColor(getContext(), R.color.app_color_blue))
                         .maxSelectNum(maxSelectNum)// 最大图片选择数量
                         .minSelectNum(1)// 最小选择数量
                         .maxVideoSelectNum(1) // 视频最大选择数量
                         //.minVideoSelectNum(1)// 视频最小选择数量
                         //.closeAndroidQChangeVideoWH(!SdkVersionUtils.checkedAndroid_Q())// 关闭在AndroidQ下获取图片或视频宽高相反自动转换
                         .imageSpanCount(4)// 每行显示个数
+                        //.queryFileSize() // 过滤最大资源,已废弃
+                        .filterMinFileSize(5)// 过滤最小资源，单位kb
+                        //.filterMaxFileSize()// 过滤最大资源，单位kb
                         .isReturnEmpty(false)// 未选择数据时点击按钮是否可以返回
                         .closeAndroidQChangeWH(true)//如果图片有旋转角度则对换宽高,默认为true
                         .closeAndroidQChangeVideoWH(!SdkVersionUtils.checkedAndroid_Q())// 如果视频有旋转角度则对换宽高,默认为false
-                        //.isAndroidQTransform(true)// 是否需要处理Android Q 拷贝至应用沙盒的操作，只针对compress(false); && .isEnableCrop(false);有效,默认处理
+                        .isAndroidQTransform(true)// 是否需要处理Android Q 拷贝至应用沙盒的操作，只针对compress(false); && .isEnableCrop(false);有效,默认处理
                         .setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)// 设置相册Activity方向，不设置默认使用系统
                         .isOriginalImageControl(cb_original.isChecked())// 是否显示原图控制按钮，如果设置为true则用户可以自由选择是否使用原图，压缩、裁剪功能将会失效
                         //.bindCustomPlayVideoCallback(new MyVideoSelectedPlayCallback(getContext()))// 自定义视频播放回调控制，用户可以使用自己的视频播放界面
                         //.bindCustomPreviewCallback(new MyCustomPreviewInterfaceListener())// 自定义图片预览回调接口
                         //.bindCustomCameraInterfaceListener(new MyCustomCameraInterfaceListener())// 提供给用户的一些额外的自定义操作回调
+                        //.bindCustomPermissionsObtainListener(new MyPermissionsObtainCallback())// 自定义权限拦截
                         //.cameraFileName(System.currentTimeMillis() +".jpg")    // 重命名拍照文件名、如果是相册拍照则内部会自动拼上当前时间戳防止重复，注意这个只在使用相机时可以使用，如果使用相机又开启了压缩或裁剪 需要配合压缩和裁剪文件名api
                         //.renameCompressFile(System.currentTimeMillis() +".jpg")// 重命名压缩文件名、 如果是多张压缩则内部会自动拼上当前时间戳防止重复
                         //.renameCropFileName(System.currentTimeMillis() + ".jpg")// 重命名裁剪文件名、 如果是多张裁剪则内部会自动拼上当前时间戳防止重复
@@ -471,6 +486,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         .isPreviewImage(cb_preview_img.isChecked())// 是否可预览图片
                         .isPreviewVideo(cb_preview_video.isChecked())// 是否可预览视频
                         //.querySpecifiedFormatSuffix(PictureMimeType.ofJPEG())// 查询指定后缀格式资源
+                        //.queryMimeTypeConditions(PictureMimeType.ofWEBP())
                         .isEnablePreviewAudio(cb_preview_audio.isChecked()) // 是否可播放音频
                         .isCamera(cb_isCamera.isChecked())// 是否显示拍照按钮
                         //.isMultipleSkipCrop(false)// 多图裁剪时是否支持跳过，默认支持
@@ -480,6 +496,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         .isEnableCrop(cb_crop.isChecked())// 是否裁剪
                         //.basicUCropConfig()//对外提供所有UCropOptions参数配制，但如果PictureSelector原本支持设置的还是会使用原有的设置
                         .isCompress(cb_compress.isChecked())// 是否压缩
+                        //.compressEngine(ImageCompressEngine.createCompressEngine()) // 自定义压缩引擎
                         //.compressQuality(80)// 图片压缩后输出质量 0~ 100
                         .synOrAsy(false)//同步true或异步false 压缩 默认同步
                         //.queryMaxFileSize(10)// 只查多少M以内的图片、视频、音频  单位M
@@ -618,6 +635,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Log.i(TAG, "Android Q 特有Path:" + media.getAndroidQToPath());
                 Log.i(TAG, "宽高: " + media.getWidth() + "x" + media.getHeight());
                 Log.i(TAG, "Size: " + media.getSize());
+
+                Log.i("MMM", "onResult: " + media.toString());
                 // TODO 可以通过PictureSelectorExternalUtils.getExifInterface();方法获取一些额外的资源信息，如旋转角度、经纬度等信息
             }
             if (mAdapterWeakReference.get() != null) {
@@ -636,12 +655,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      * 自定义播放逻辑处理，用户可以自己实现播放界面
      */
     private static class MyVideoSelectedPlayCallback implements OnVideoSelectedPlayCallback<LocalMedia> {
-        private WeakReference<Context> mContextWeakReference;
-        private Context context;
+        private final Context context;
 
         public MyVideoSelectedPlayCallback(Context context) {
             super();
-            this.mContextWeakReference = new WeakReference<>(context);
+            WeakReference<Context> mContextWeakReference = new WeakReference<>(context);
             this.context = mContextWeakReference.get();
         }
 
@@ -650,6 +668,36 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             if (context != null) {
                 ToastUtils.s(context, media.getPath());
             }
+        }
+    }
+
+    /**
+     * 自定义权限管理回调
+     */
+    private static class MyPermissionsObtainCallback implements OnPermissionsObtainCallback {
+
+        @Override
+        public void onPermissionsIntercept(Context context, boolean isCamera, String[] permissions, String tips, OnPermissionDialogOptionCallback dialogOptionCallback) {
+            PictureCustomDialog dialog = new PictureCustomDialog(context, R.layout.picture_wind_base_dialog);
+            dialog.setCancelable(false);
+            dialog.setCanceledOnTouchOutside(false);
+            Button btn_cancel = dialog.findViewById(R.id.btn_cancel);
+            Button btn_commit = dialog.findViewById(R.id.btn_commit);
+            btn_commit.setText(context.getString(R.string.picture_go_setting));
+            TextView tvTitle = dialog.findViewById(R.id.tvTitle);
+            TextView tv_content = dialog.findViewById(R.id.tv_content);
+            tvTitle.setText(context.getString(R.string.picture_prompt));
+            tv_content.setText(tips);
+            btn_cancel.setOnClickListener(v -> {
+                dialog.dismiss();
+                dialogOptionCallback.onCancel();
+            });
+            btn_commit.setOnClickListener(v -> {
+                dialog.dismiss();
+                dialogOptionCallback.onSetting();
+                PermissionChecker.launchAppDetailsSettings(context);
+            });
+            dialog.show();
         }
     }
 
@@ -813,6 +861,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             case R.id.rb_audio:
                 chooseMode = PictureMimeType.ofAudio();
                 cb_preview_audio.setVisibility(View.VISIBLE);
+                break;
+            case R.id.rb_system:
+                language = -1;
                 break;
             case R.id.rb_jpan:
                 language = LanguageConfig.JAPAN;
@@ -1405,7 +1456,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     @Override
-    protected void onSaveInstanceState(Bundle outState) {
+    protected void onSaveInstanceState(@NotNull Bundle outState) {
         super.onSaveInstanceState(outState);
         if (mAdapter != null && mAdapter.getData() != null && mAdapter.getData().size() > 0) {
             outState.putParcelableArrayList("selectorList",
@@ -1413,7 +1464,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    private BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
+    private final BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
